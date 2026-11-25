@@ -1,0 +1,230 @@
+domain: 개인정보 처리·정보주체 권리
+checks:
+  - id: prv-basis
+    need: 처리 업무마다 법 제15조의 적법 근거를 확인하고, 동의 시 4가지 고지 사항을 알린다
+    legal: true
+    severity: high
+    effort: M
+    fix: [처리 흐름별로 동의·법령·계약·정당한 이익 등 근거를 지정합니다., "목적, 항목, 보유기간, 거부권과 불이익을 동의서에 넣습니다.", 동의 없이 처리하는 항목과 법적 근거를 구분해 공개합니다.]
+    evidence: [처리 근거 목록, 동의 화면 캡처]
+    map: { pipa: [제15조, 제22조], ismsp: [3.1.1], iso: [A.5.34] }
+  - id: prv-consent
+    need: 동의 사항을 구분해 명확히 알리고 필수·선택·홍보·민감·고유식별 동의를 각각 받으며 기록을 보관한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [포괄 동의·사전 체크를 없앱니다., 홍보·제3자 제공·민감·고유식별 동의를 분리합니다., 동의 버전·시각·방법을 저장합니다.]
+    evidence: [동의 이력 샘플, 동의서 양식]
+    map: { pipa: [제22조], ismsp: [3.1.1], iso: [A.5.34] }
+  - id: prv-children
+    need: 만 14세 미만 아동은 법정대리인 동의를 받고 동의 여부를 확인하며 쉬운 언어로 알린다
+    when: { fact: children, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [가입 시 연령을 확인합니다., 시행령이 정한 방법으로 법정대리인 동의를 확인합니다., 아동용 고지문을 만듭니다.]
+    evidence: [법정대리인 동의 확인 절차, 아동용 고지문]
+    map: { pipa: [제22조의2, 제38조], ismsp: [3.1.1], iso: [A.5.34] }
+  - id: prv-minimum
+    need: 목적에 필요한 최소한만 수집하고 선택 정보 미동의를 이유로 서비스를 거부하지 않는다
+    legal: true
+    severity: high
+    effort: S
+    fix: [항목별 필요성을 검토해 불필요한 수집을 제거합니다., 필수·선택을 화면과 API에서 구분합니다.]
+    evidence: [수집 항목 필요성 검토서]
+    map: { pipa: [제3조, 제16조, 제22조], ismsp: [3.1.2], iso: [A.5.34] }
+  - id: prv-rrn
+    need: 주민등록번호를 법령상 구체적 근거가 있을 때만 처리하고 회원가입 시 대체수단을 제공한다
+    when: { fact: rrn, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [처리 지점마다 근거 법령 조항을 적습니다., 근거 없는 수집·보관분을 파기합니다., 회원가입에 휴대폰 인증 등 대체수단을 제공합니다.]
+    evidence: [주민등록번호 처리 근거표, 대체수단 화면]
+    map: { pipa: [제24조의2], ismsp: [3.1.3], iso: [A.5.34] }
+  - id: prv-sensitive
+    need: 민감정보·고유식별정보는 별도 동의 또는 법령 근거로만 처리하고 민감정보 공개 가능성을 사전에 알린다
+    when: { ref: uniqueOrSensitive }
+    legal: true
+    severity: high
+    effort: M
+    fix: [별도 동의 또는 근거 법령을 확인합니다., 공개될 수 있는 민감정보와 비공개 선택 방법을 알립니다.]
+    evidence: [별도 동의서, 근거 법령 목록]
+    map: { pipa: [제23조, 제24조], ismsp: [3.1.4], iso: [A.5.34] }
+  - id: prv-indirect
+    need: 간접수집 정보의 출처 등을 요구 시 즉시 알리고, 대상 규모면 3개월 이내 통지·기록한다
+    when: { fact: indirect, is: true }
+    legal: true
+    severity: med
+    effort: M
+    fix: [수집 출처와 제공자의 동의 확보를 계약으로 확인합니다., 규모 요건에 해당하면 3개월 이내 통지 절차를 만듭니다., 통지 사실·시기·방법을 파기 때까지 보관합니다.]
+    evidence: [수집 출처 목록, 출처 통지 기록]
+    map: { pipa: [제20조], ismsp: [3.1.5, 3.5.3], iso: [A.5.34] }
+  - id: prv-cctv
+    need: 고정형 영상기기의 허용 목적·안내판·운영 방침을 지키고 녹음·목적 외 조작을 하지 않는다
+    when: { fact: cctv, is: true }
+    legal: true
+    severity: med
+    effort: S
+    fix: [법 제25조④ 사항을 담은 안내판을 설치합니다., 운영·관리 방침을 만들거나 처리방침에 포함합니다., 보관기간과 열람 절차를 정합니다.]
+    evidence: [안내판 사진, 영상기기 운영·관리 방침]
+    map: { pipa: [제25조], ismsp: [3.1.6], iso: [A.7.4] }
+  - id: prv-mobilecam
+    need: 이동형 영상기기의 촬영 근거를 확인하고 불빛·소리·안내판 등으로 촬영 사실을 알린다
+    when: { fact: mobileCam, is: true }
+    legal: true
+    severity: med
+    effort: S
+    fix: [촬영 목적·장소별 허용 근거를 확인합니다., 촬영 사실 표시와 거부 의사 처리 방법을 둡니다.]
+    evidence: [이동형 영상기기 운영 기준, 촬영 표시 사진]
+    map: { pipa: [제25조의2], ismsp: [3.1.6], iso: [A.5.34] }
+  - id: prv-marketing
+    need: 홍보 목적 동의를 구분해 받고 광고성 정보 전송의 사전 동의·야간·수신거부 규칙을 지킨다
+    when: { fact: marketing, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [홍보 목적을 명확히 알리고 별도 동의를 받습니다., 21시~다음 날 8시 전송은 별도 동의를 받습니다(정보통신망법 제50조③)., 수신거부·동의 확인 처리 결과를 기록합니다.]
+    evidence: [마케팅 동의 화면, 수신거부 처리 기록]
+    map: { pipa: [제22조], ismsp: [3.1.7], iso: [A.5.34] }
+  - id: prv-inventory
+    need: 보유 개인정보의 항목·양·목적·근거·보유기간을 현황으로 관리한다
+    severity: high
+    effort: M
+    fix: ["처리 흐름 화면을 부서별로 채우고 검토합니다.", 공공기관은 개인정보파일 등록 대상도 확인합니다.]
+    evidence: [개인정보 처리 현황표]
+    map: { pipa: [제3조], ismsp: [3.2.1], iso: [A.5.9, A.5.34] }
+  - id: prv-quality
+    need: 개인정보를 정확하고 최신으로 유지하며 정보주체가 쉽게 정정할 수 있다
+    legal: true
+    severity: low
+    effort: S
+    fix: [회원정보 수정 화면과 오프라인 절차를 제공합니다., 변경 시 관련 시스템에 반영합니다.]
+    evidence: [정보 수정 화면, 정정 처리 기록]
+    map: { pipa: [제3조, 제36조], ismsp: [3.2.2], iso: [A.5.34] }
+  - id: prv-device
+    need: 모바일 앱의 단말 접근권한을 필수·선택으로 구분해 알리고 동의를 받는다
+    when: { fact: mobileApp, is: true }
+    severity: med
+    effort: S
+    fix: [앱이 요구하는 권한을 전수 조사합니다., 필요 없는 권한을 제거합니다., 선택 권한은 거부해도 서비스를 이용할 수 있게 합니다.]
+    evidence: [앱 권한 고지 화면, 권한 목록]
+    map: { ismsp: [3.2.3], iso: [A.5.34] }
+  - id: prv-purpose
+    need: 목적 외 이용·제공을 법정 예외나 별도 동의로 제한하고 근거를 기록한다
+    legal: true
+    severity: high
+    effort: S
+    fix: [목적 외 이용·제공 승인 절차를 둡니다., 제18조② 예외 근거를 건별로 기록합니다., 제공받는 자에게 이용 제한과 안전조치를 요구합니다.]
+    evidence: [목적 외 이용·제공 대장]
+    map: { pipa: [제18조], ismsp: [3.2.4], iso: [A.5.34] }
+  - id: prv-pseudonym
+    need: 가명정보의 추가정보를 분리 보관하고 처리 기록·재식별 금지를 지킨다
+    when: { fact: pseudonym, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [처리 목적과 적정성 검토를 기록합니다., 추가정보를 분리하고 접근권한도 나눕니다., 처리 기록을 보관합니다(파기 후 3년 이상).]
+    evidence: [가명처리 검토서, 가명정보 처리 기록]
+    map: { pipa: [제28조의2, 제28조의4, 제28조의5], ismsp: [3.2.5], iso: [A.8.11] }
+  - id: prv-third
+    need: 제3자 제공의 적법 근거를 확보하고 제공 내역을 기록하며 안전하게 전달한다
+    when: { fact: thirdParty, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [제공 건별 동의·법령 근거를 확인합니다., 제공받는 자·목적·항목·기간·거부권을 알립니다., 제공 대장과 암호화 전송을 적용합니다.]
+    evidence: [제3자 제공 동의서, 제공 대장]
+    map: { pipa: [제17조], ismsp: [3.3.1], iso: [A.5.14, A.5.34] }
+  - id: prv-outsource-public
+    need: 위탁 업무 내용과 수탁자(재수탁자 포함)를 홈페이지에 지속 공개한다
+    when: { fact: outsourcing, is: true }
+    legal: true
+    severity: med
+    effort: S
+    fix: [처리방침의 수탁자 목록을 계약 목록과 대조합니다., 홍보·판매권유 위탁은 서면등으로 정보주체에게 알립니다., 변경 시 즉시 갱신합니다.]
+    evidence: [수탁자 공개 화면]
+    map: { pipa: [제26조], ismsp: [3.3.2], iso: [A.5.34] }
+  - id: prv-transfer
+    need: 영업양도·합병으로 개인정보를 이전할 때 사전 통지하고 본래 목적으로만 이용한다
+    when: { fact: transfer, is: true }
+    legal: true
+    severity: med
+    effort: S
+    fix: [이전 사실·이전받는 자·거부 방법을 미리 알립니다., 양수 후 통지 여부를 확인합니다.]
+    evidence: [이전 통지 기록]
+    map: { pipa: [제27조], ismsp: [3.3.3], iso: [A.5.34] }
+  - id: prv-overseas
+    need: 국외 이전의 적법 근거(별도 동의·계약이행 위탁 공개·인증·동등성 등)와 보호조치를 갖췄다
+    when: { fact: overseas, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [국외 클라우드·SaaS·해외 조회를 모두 목록화합니다., 건별로 제28조의8① 근거를 지정합니다., "항목, 국가·시기·방법, 받는 자, 목적·기간, 거부 방법을 공개하거나 알립니다.", 보호조치를 계약에 반영합니다(시행령 제29조의10).]
+    evidence: [국외 이전 현황, 국외 이전 계약·고지]
+    map: { pipa: [제28조의8], ismsp: [3.3.4], iso: [A.5.14, A.5.34] }
+  - id: prv-destroy
+    need: 보유기간 경과·목적 달성 시 지체 없이 복구 불가능하게 파기하고 기록한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [항목별 보유기간과 자동 파기 배치를 설정합니다., 백업·로그·파일·종이까지 포함합니다., 파기 승인·결과를 기록합니다.]
+    evidence: [파기 기록, 자동 파기 설정]
+    map: { pipa: [제21조, 기준 제13조], ismsp: [3.4.1], iso: [A.8.10] }
+  - id: prv-retain
+    need: 법령상 보존 정보는 근거 항목만 분리 저장하고 접근을 제한한다
+    when: { fact: retainedByLaw, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [보존 근거 법령·항목·기간을 표로 만듭니다., 운영 DB와 분리하고 접근권한을 최소화합니다.]
+    evidence: [분리보관 DB 설정, 보존 근거표]
+    map: { pipa: [제21조], ismsp: [3.4.2], iso: [A.5.33] }
+  - id: prv-policy
+    need: 법정 사항을 모두 담은 처리방침을 홈페이지에 지속 공개하고 변경 이력을 관리한다
+    legal: true
+    severity: high
+    effort: S
+    fix: ["`doc privacy-policy` 초안을 처리 현황과 대조합니다.", 법 제30조①·시행령 제31조① 사항(파기·안전조치·국외 이전 포함)을 점검합니다., 첫 화면에서 찾을 수 있게 하고 이전 판을 보관합니다.]
+    evidence: [처리방침 공개 화면, 처리방침 개정 이력]
+    map: { pipa: [제30조], ismsp: [3.5.1], iso: [A.5.34] }
+  - id: prv-rights-days
+    need: 열람 요구를 받고 조치·통지하기까지 걸리는 최대 일수
+    legal: true
+    severity: high
+    effort: M
+    type: number
+    unit: 일
+    rules: [{ lte: 10, basis: "개인정보 보호법 제35조③, 시행령 제41조④·⑤(10일)" }]
+    fix: [접수·본인확인·처리·통지 담당과 기한을 정합니다., 접수일부터 10일 이내에 열람 또는 연기·거절 통지를 합니다., 처리 대장을 관리합니다.]
+    evidence: [열람 등 요구 처리 대장]
+    map: { pipa: [제35조], ismsp: [3.5.2], iso: [A.5.34] }
+  - id: prv-rights
+    need: 열람·정정·삭제·처리정지·동의철회 방법을 수집보다 어렵지 않게 제공하고 이의제기 절차를 둔다
+    legal: true
+    severity: high
+    effort: M
+    fix: [수집 창구와 같은 경로의 요구 방법을 제공합니다., 대리인·법정대리인 절차와 거절 사유 통지를 정합니다., 절차를 처리방침과 홈페이지에 공개합니다.]
+    evidence: [권리행사 안내 화면, 권리행사 절차서]
+    map: { pipa: [제35조, 제36조, 제37조, 제38조], ismsp: [3.5.2], iso: [A.5.34] }
+  - id: prv-auto
+    need: 자동화된 결정의 기준·절차를 공개하고 거부·설명 요구를 처리한다
+    when: { fact: autoDecision, is: true }
+    legal: true
+    severity: med
+    effort: M
+    fix: [완전 자동 결정과 영향을 목록화합니다., 기준·절차·처리 방식을 공개합니다., 인적 개입 재처리와 설명 절차를 둡니다.]
+    evidence: [자동화된 결정 공개 화면, 거부·설명 처리 절차]
+    map: { pipa: [제37조의2], ismsp: [3.5.2], iso: [A.5.34] }
+  - id: prv-notice
+    need: 개인정보 이용·제공 내역을 통지하는 주기
+    when: { ref: sensitiveScale }
+    legal: true
+    severity: med
+    effort: M
+    type: number
+    unit: 개월
+    rules: [{ lte: 12, basis: "시행령 제15조의3④(연 1회 이상)" }]
+    fix: [대상자와 제외 사유를 추출합니다., 수집·이용 목적과 항목·제3자 제공 내역을 담아 통지합니다., 발송 증빙을 보관합니다.]
+    evidence: [이용·제공 내역 통지문, 발송 기록]
+    map: { pipa: [제20조의2], ismsp: [3.5.3], iso: [A.5.34] }

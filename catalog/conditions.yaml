@@ -1,0 +1,57 @@
+# 여러 곳에서 쓰는 조건. all/any/not과 fact 비교로만 표현합니다.
+sensitiveScale: # 시행령 제15조의2①, 제15조의3①
+  any:
+    - { fact: sensitiveSubjects, gte: 50000 }
+    - { fact: subjects, gte: 1000000 }
+largeHolder: # 안전성 확보조치 기준 제7조⑥, 제11조
+  any:
+    - all:
+        - { fact: subjects, gte: 100000 }
+        - any: [{ fact: sizeClass, in: [large, midcap] }, { fact: orgType, in: [public] }]
+    - all:
+        - { fact: subjects, gte: 1000000 }
+        - any: [{ fact: sizeClass, in: [micro, small, medium] }, { fact: orgType, in: [nonprofit] }]
+internalPlanExempt: # 안전성 확보조치 기준 제4조① 단서
+  all:
+    - { fact: subjects, lt: 10000 }
+    - any: [{ fact: sizeClass, in: [micro] }, { fact: orgType, in: [nonprofit] }]
+internalPlanRequired: { not: { ref: internalPlanExempt } }
+logTwoYears: # 안전성 확보조치 기준 제8조① 단서
+  any:
+    - { fact: subjects, gte: 50000 }
+    - { fact: uniqueId, is: true }
+    - { fact: sensitive, is: true }
+    - { fact: carrier, is: true }
+netSeparation: { fact: storedUsers, gte: 1000000 } # 안전성 확보조치 기준 제6조의2①
+ismsMandatory: # 정보통신망법 제47조②, 시행령 제49조②
+  all:
+    - { fact: onlineService, is: true }
+    - any:
+        - { fact: majorIsp, is: true }
+        - { fact: idc, is: true }
+        - all:
+            - { fact: revenue, gte: 1500 }
+            - any:
+                - { fact: tertiaryHospital, is: true }
+                - all: [{ fact: university, is: true }, { fact: students, gte: 10000 }]
+        - all:
+            - { fact: financial, is: false }
+            - any: [{ fact: itRevenue, gte: 100 }, { fact: dailyUsers, gte: 1000000 }]
+cpoReport: # 시행령 제32조③
+  any:
+    - all:
+        - { fact: revenue, gt: 1800 }
+        - { fact: school, is: false }
+        - { fact: hospital, is: false }
+        - { ref: sensitiveScale }
+    - all: [{ fact: university, is: true }, { fact: students, gte: 20000 }]
+    - { fact: tertiaryHospital, is: true }
+    - { fact: publicSystem, is: true }
+insurance: # 시행령 제48조의7①
+  all:
+    - { fact: revenue, gte: 10 }
+    - { fact: externalSubjects, gte: 10000 }
+uniqueOrSensitive: { any: [{ fact: uniqueId, is: true }, { fact: sensitive, is: true }] }
+encryptTarget: { any: [{ fact: uniqueId, is: true }, { fact: cardAccount, is: true }, { fact: biometric, is: true }] }
+isPublic: { fact: orgType, in: [public] }
+externalParties: { any: [{ fact: contractors, is: true }, { fact: outsourcing, is: true }] }

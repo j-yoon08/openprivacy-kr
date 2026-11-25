@@ -1,0 +1,1 @@
+- { id: R-1, asset: 쇼핑몰 DB, threat: 관리자 SaaS 계정 탈취로 회원정보 유출, likelihood: 3, impact: 5, treatment: mitigate, plan: 모든 관리자 계정에 MFA 강제, owner: 인프라팀, due: "2026-12-31", check: acc-remote-mfa }

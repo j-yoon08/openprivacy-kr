@@ -1,0 +1,20 @@
+log-retention: { value: 12, note: "애플리케이션 로그를 1년만 보관", owner: 인프라팀, due: "2026-12-31" }
+acc-history: { value: 12 }
+acc-remote-mfa: { value: partial, note: "VPN은 OTP 적용, SaaS 관리자는 미적용" }
+cry-password: { value: "yes" }
+cry-transit: { value: "yes" }
+cry-store: { value: "yes", note: "카드번호 AES-256" }
+gov-internal-plan: { value: partial, note: "2024년판, 출력·복사와 파기 항목 없음" }
+gov-internal-plan-review: { value: 18 }
+gov-ceo: { value: "no" }
+inc-plan: { value: partial, note: "유출 가능성 통지 절차 없음" }
+inc-possible: { value: "no" }
+prv-overseas: { value: "no", note: "해외 고객상담 SaaS 사용" }
+prv-policy: { value: partial }
+prv-retain: { value: "no" }
+prv-rights-days: { value: 14 }
+sup-monitor: { value: "no" }
+ops-patch: { value: "yes" }
+log-time: { value: "yes" }
+dev-source: { value: "yes" }
+phy-zone: { value: "na", note: "자체 전산실 없이 클라우드만 사용하고 사무공간은 공유오피스 관리" }

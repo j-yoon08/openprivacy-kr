@@ -1,0 +1,126 @@
+domain: 개발·사고 대응·재해 복구
+checks:
+  - id: dev-req
+    need: 시스템 도입·개발 시 보안·개인정보 요구사항과 안전한 설계·코딩 기준을 정의한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: M
+    fix: [법적 요구·인증·암호화·로그를 요구사항 양식에 넣습니다., 안전한 설계 원칙과 코딩 표준을 정합니다., 프로젝트 관리 절차에 보안 검토 단계를 넣습니다.]
+    evidence: [보안 요구사항 정의서, 시큐어 코딩 표준]
+    map: { pipa: [제3조], ismsp: [2.8.1], iso: [A.5.8, A.8.25, A.8.26, A.8.27, A.8.28] }
+  - id: dev-test
+    need: 구현된 보안 요구사항을 시험하고 취약점을 조치한 뒤 승인한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: M
+    fix: [SAST·의존성 점검과 보안 시험을 CI에 넣습니다., 발견 취약점의 조치 기한과 배포 차단 기준을 정합니다., 외주 결과물의 인수 시험을 합니다.]
+    evidence: [보안 시험 결과, 취약점 조치 내역]
+    map: { ismsp: [2.8.2], iso: [A.8.29, A.8.30] }
+  - id: dev-separate
+    need: 개발·시험·운영 환경을 분리하고 어렵다면 보완통제를 적용한다
+    when: { fact: development, is: true }
+    severity: med
+    effort: M
+    fix: [계정·네트워크·데이터를 환경별로 분리합니다., 개발자의 운영 접근을 승인제로 바꿉니다.]
+    evidence: [환경 구성도, 운영 접근 승인 기록]
+    map: { ismsp: [2.8.3], iso: [A.8.31] }
+  - id: dev-data
+    need: 시험에 운영 개인정보를 쓰지 않거나 승인·가공·삭제를 통제한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: M
+    fix: [합성·비식별 데이터로 바꿉니다., 불가피하면 승인·접근통제·기간·삭제를 기록합니다.]
+    evidence: [시험 데이터 생성 기준, 사용 승인·삭제 기록]
+    map: { ismsp: [2.8.4], iso: [A.8.11, A.8.33] }
+  - id: dev-source
+    need: 소스 접근을 인가자로 제한하고 변경 이력·승인과 비밀정보 유출 방지를 관리한다
+    when: { fact: development, is: true }
+    severity: med
+    effort: S
+    fix: [저장소 최소 권한과 브랜치 보호·리뷰를 강제합니다., 비밀정보 스캔과 푸시 차단을 켭니다., "`scan github`으로 설정을 점검합니다."]
+    evidence: [저장소 권한 목록, 브랜치 보호 설정]
+    map: { ismsp: [2.8.5], iso: [A.8.4] }
+  - id: dev-release
+    need: 운영 이관을 승인·시험·롤백 절차로 통제한다
+    when: { fact: development, is: true }
+    severity: med
+    effort: S
+    fix: [배포 승인자와 개발자를 분리합니다., 배포 기록과 롤백 시험을 남깁니다., 운영 환경에 불필요한 소스·도구를 두지 않습니다.]
+    evidence: [배포 승인 기록, 롤백 절차]
+    map: { ismsp: [2.8.6], iso: [A.8.19, A.8.32] }
+  - id: inc-plan
+    need: 유출·침해사고 대응 절차, 조직, 연락망, 법정 통지·신고 기한을 문서로 정했다
+    legal: true
+    severity: high
+    effort: M
+    fix: [인지 → 초동조치 → 분석 → 통지·신고 → 복구 → 재발방지 단계를 정합니다., "통지 72시간, 개인정보 유출 신고 72시간, 침해사고 신고 24시간(정보통신서비스 제공자)을 시각표로 만듭니다.", 2026-09-11 시행된 유출 가능성 통지와 법정 손해배상 안내 항목을 통지문에 넣습니다.]
+    evidence: [사고 대응 절차서, 통지·신고 양식, 비상 연락망]
+    map: { pipa: [제34조, 기준 제4조], ismsp: [2.11.1], iso: [A.5.5, A.5.24, A.5.25, A.6.8] }
+  - id: inc-possible
+    need: 유출이 확정되지 않아도 시행령 제39조의2의 '가능성' 상황을 판정하고 72시간 내 통지할 수 있다
+    legal: true
+    severity: high
+    effort: S
+    fix: [불법 접근이 있으나 정보주체 특정이 어려운 경우와 일부 유출 확인 후 추가 유출이 의심되는 경우를 판정 기준에 넣습니다., 확정 시 추가 통지와 미유출 확인 시 즉시 통지 절차를 넣습니다., 30일 이상 게시 대체 절차를 준비합니다.]
+    evidence: [유출 가능성 판정표, 가능성 통지 양식]
+    map: { pipa: [제34조], ismsp: [2.11.1, 2.11.5], iso: [A.5.25, A.5.26] }
+  - id: inc-vuln
+    need: 취약점 점검 주기
+    legal: true
+    severity: high
+    effort: M
+    type: number
+    unit: 개월
+    rules:
+      - { when: { fact: publicSystem, is: true }, lte: 12, basis: "안전성 확보조치 기준 제18조①(2027-01-01 시행, 연 1회 이상)" }
+      - { lte: 12, basis: "안전성 확보조치 기준 제4조①10(점검 사항 포함 의무), ISMS-P 2.11.2 정기 점검(이 도구의 권장 상한 12개월)" }
+    fix: [서버·DB·웹·앱·클라우드를 포함한 연간 점검 계획을 세웁니다., 발견 취약점의 조치·재점검·예외 승인을 관리합니다., 위협 정보와 신규 취약점을 수집해 즉시 영향도를 확인합니다.]
+    evidence: [취약점 점검 보고서, 조치 결과]
+    map: { pipa: [기준 제4조], ismsp: [2.11.2], iso: [A.5.7, A.8.8] }
+  - id: inc-public-pentest
+    need: 공공시스템별로 외부 전문가 침투테스트를 연 1회 이상 한다(2027-01-01 시행)
+    when: { fact: publicSystem, is: true }
+    legal: true
+    severity: high
+    effort: L
+    fix: [2027년 예산과 발주 계획에 공공시스템별 침투테스트를 넣습니다., 결과 보완조치를 지체 없이 시행합니다.]
+    evidence: [침투테스트 보고서, 보완조치 결과]
+    map: { pipa: [기준 제18조], ismsp: [2.11.2], iso: [A.8.8, A.8.29] }
+  - id: inc-monitor
+    need: 이상행위를 상시 모니터링하고 판단 기준과 후속 조치 절차를 둔다
+    severity: high
+    effort: M
+    fix: [계정·네트워크·DB·개인정보 다운로드 이상 기준을 정합니다., 경보를 중앙에서 받고 처리 시간을 관리합니다.]
+    evidence: [모니터링 정책, 이상행위 조치 기록]
+    map: { ismsp: [2.11.3], iso: [A.8.16] }
+  - id: inc-drill
+    need: 사고 대응 모의훈련을 연 1회 이상 하고 결과를 개선에 반영한다
+    severity: med
+    effort: M
+    fix: [유출·랜섬웨어 시나리오를 만듭니다., 24시간·72시간 시한을 포함해 훈련합니다., 미흡사항을 절차에 반영합니다.]
+    evidence: [모의훈련 결과 보고서]
+    map: { ismsp: [2.11.4], iso: [A.5.24] }
+  - id: inc-respond
+    need: 사고 발생 시 증거 보존, 원인분석, 피해 최소화, 재발방지를 수행하고 기록한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [로그·디스크 증거 보존 절차를 정합니다., 유출정보 회수·삭제 등 피해 최소화 조치를 정합니다., 사후 검토 결과를 교육과 위험평가에 반영합니다.]
+    evidence: [사고 처리 보고서, 증거 보존 기록]
+    map: { pipa: [제34조], ismsp: [2.11.5], iso: [A.5.26, A.5.27, A.5.28] }
+  - id: dr-plan
+    need: 재해·재난 대응 매뉴얼과 시스템 백업·복구 계획(복구 목표 포함)을 마련했다
+    legal: { ref: largeHolder }
+    severity: med
+    effort: L
+    fix: [재해 유형별 업무 영향도를 분석합니다., RTO·RPO와 복구 순서·담당자를 정합니다., 필요한 이중화와 업무 중단 중 보안 유지 방안을 정합니다.]
+    evidence: [재해복구 계획, 업무영향분석(BIA)]
+    map: { pipa: [기준 제11조], ismsp: [2.12.1], iso: [A.5.29, A.5.30, A.8.14] }
+  - id: dr-test
+    need: 재해 복구 절차를 정기적으로 시험·점검하고 개선한다
+    legal: { ref: largeHolder }
+    severity: med
+    effort: M
+    fix: [연간 시험 계획을 세우고 복구 시간을 측정합니다., 목표 미달 원인을 개선합니다.]
+    evidence: [복구 시험 결과]
+    map: { pipa: [기준 제11조], ismsp: [2.12.2], iso: [A.5.30] }

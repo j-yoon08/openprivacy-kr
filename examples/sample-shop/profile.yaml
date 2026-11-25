@@ -1,0 +1,53 @@
+# 가상의 회사입니다. 실제 조직과 관계없습니다.
+targets: [pipa, ismsp, iso]
+facts:
+  orgName: 가나다몰(예시)
+  orgType: private
+  sizeClass: medium
+  employees: 85
+  revenue: 420
+  scopeText: 가나다몰 쇼핑몰 서비스의 운영과 이를 지원하는 조직·시스템
+  cpoName: 홍길동 이사(예시)
+  contact: 개인정보보호팀 privacy@example.com
+  onlineService: true
+  itRevenue: 310
+  dailyUsers: 42000
+  majorIsp: false
+  idc: false
+  carrier: false
+  financial: false
+  tertiaryHospital: false
+  hospital: false
+  university: false
+  school: false
+  publicSystem: false
+  subjects: 680000
+  storedUsers: 650000
+  externalSubjects: 679000
+  sensitiveSubjects: 1200
+  rrn: false
+  uniqueId: false
+  sensitive: false
+  cardAccount: true
+  biometric: false
+  children: false
+  indirect: false
+  thirdParty: false
+  outsourcing: true
+  overseas: true
+  marketing: true
+  cctv: false
+  mobileCam: false
+  pseudonym: false
+  autoDecision: false
+  transfer: false
+  retainedByLaw: true
+  cloud: true
+  development: true
+  mobileApp: true
+  serverRoom: false
+  remoteAccess: true
+  wireless: true
+  ecommerce: true
+  publicServer: true
+  contractors: true

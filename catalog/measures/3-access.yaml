@@ -1,0 +1,159 @@
+domain: 인증·권한·접근통제
+checks:
+  - id: acc-lifecycle
+    need: 계정 등록·변경·삭제와 권한 부여를 공식 승인 절차로 하고 최소 권한으로 차등 부여한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [직무별 권한 매트릭스를 만듭니다., 신청·승인·부여·회수를 티켓으로 남깁니다., 과도한 기본 권한을 제거합니다.]
+    evidence: [권한 신청·승인 기록, 권한 매트릭스]
+    map: { pipa: [기준 제5조], ismsp: [2.5.1], iso: [A.5.15, A.5.16, A.5.18] }
+  - id: acc-history
+    need: 개인정보처리시스템의 권한 부여·변경·말소 기록 보관 기간
+    legal: true
+    severity: high
+    effort: S
+    type: number
+    unit: 개월
+    rules: [{ gte: 36, basis: "안전성 확보조치 기준 제5조③(최소 3년)" }]
+    fix: [권한 이력이 남지 않는 시스템을 찾습니다., 이력을 별도 저장소로 내보내 3년 이상 보관합니다., 퇴직자의 말소 이력도 지우지 않도록 합니다.]
+    evidence: [권한 이력 보관 설정, 3년 전 이력 샘플]
+    map: { pipa: [기준 제5조], ismsp: [2.5.1], iso: [A.5.18] }
+  - id: acc-unique
+    need: 사용자마다 고유 계정을 쓰고 공유 계정은 정당한 사유와 책임자 승인이 있을 때만 쓴다
+    legal: true
+    severity: high
+    effort: M
+    fix: ["공용·기본 계정(admin, root 등)을 전수 조사합니다.", 개인별 계정으로 바꾸고 불가피하면 승인과 사용 추적을 적용합니다.]
+    evidence: [계정 목록, 공용계정 예외 승인서]
+    map: { pipa: [기준 제5조], ismsp: [2.5.2], iso: [A.5.16] }
+  - id: acc-auth
+    need: 인증 실패 횟수 제한, 안전한 인증수단, 동시접속·세션 통제를 적용한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [로그인 실패 임계값과 잠금을 설정합니다., 관리자·중요 시스템에 다중인증(MFA)을 적용합니다., 이용자 로그인에도 실패 제한을 둡니다.]
+    evidence: [인증 정책 설정 화면, 잠금 테스트 결과]
+    map: { pipa: [기준 제5조], ismsp: [2.5.3], iso: [A.5.17, A.8.5] }
+  - id: acc-remote-mfa
+    need: 외부에서 개인정보처리시스템 접속 시 인증서·보안토큰·OTP 등 안전한 인증수단을 적용한다
+    when: { fact: remoteAccess, is: true }
+    legal: true
+    severity: high
+    effort: M
+    fix: [외부 접속 경로(VPN·클라우드 콘솔·SaaS 관리자)를 모두 찾습니다., 정보주체를 제외한 모든 접속자에게 MFA를 강제합니다., 예외 계정을 제거하고 설정을 캡처합니다.]
+    evidence: [MFA 강제 설정, 외부 접속 경로 목록]
+    map: { pipa: [기준 제6조], ismsp: [2.5.3, 2.6.6], iso: [A.6.7, A.8.5] }
+  - id: acc-password
+    need: 취급자와 이용자의 비밀번호 작성·변경·초기화·저장 규칙을 정해 시스템으로 강제한다
+    legal: true
+    severity: med
+    effort: S
+    fix: [길이·복잡도·유출 비밀번호 차단 규칙을 정합니다., 초기 비밀번호는 최초 로그인 때 바꾸게 합니다., 공유 문서·메신저의 평문 비밀번호를 없애고 비밀관리 도구를 씁니다.]
+    evidence: [비밀번호 정책 설정]
+    map: { pipa: [기준 제5조], ismsp: [2.5.4], iso: [A.5.17] }
+  - id: acc-privileged
+    need: 관리자·특수 계정을 최소 인원에게 승인 부여하고 사용 내역을 별도로 관리한다
+    severity: high
+    effort: M
+    fix: [특수 권한자 목록과 유효기간을 관리합니다., 상시 권한 대신 시간제 권한 상승을 검토합니다., 특권 유틸리티 사용을 제한하고 기록합니다.]
+    evidence: [특수 권한자 목록, 특권 사용 기록]
+    map: { ismsp: [2.5.5], iso: [A.8.2, A.8.18] }
+  - id: acc-review
+    need: 접근권한의 적정성을 정기 검토하는 주기
+    severity: high
+    effort: S
+    type: number
+    unit: 개월
+    rules:
+      - { when: { fact: publicSystem, is: true }, lte: 6, basis: "안전성 확보조치 기준 제16조④(공공시스템 반기 1회 이상)" }
+      - { lte: 12, basis: "ISMS-P 2.5.6 정기 검토(이 도구의 권장 상한 12개월)" }
+    fix: [시스템별 현재 권한을 추출해 부서장이 검토합니다., 장기 미사용·퇴직·과다 권한을 회수합니다., 검토와 조치 결과를 승인받습니다.]
+    evidence: [권한 검토 결과와 조치 내역]
+    map: { ismsp: [2.5.6], iso: [A.5.18] }
+  - id: net-segment
+    need: 네트워크를 업무·중요도에 따라 분리하고 IP 제한 등으로 비인가 접근을 막는다
+    legal: true
+    severity: high
+    effort: L
+    fix: [DMZ·서버·DB·업무망을 분리합니다., 개인정보처리시스템 접속을 IP·기기·신원 기반으로 제한합니다., 네트워크 장비와 연계 서비스의 보안 요건을 정합니다.]
+    evidence: [네트워크 구성도, 접근통제 정책]
+    map: { pipa: [기준 제6조], ismsp: [2.6.1], iso: [A.8.20, A.8.21, A.8.22] }
+  - id: net-detect
+    need: 개인정보처리시스템 접속 IP 등을 분석해 유출 시도를 탐지하고 대응한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [IDS/IPS·WAF·클라우드 탐지를 적용하고 경보 담당자를 정합니다., 해외·심야·대량 조회 기준을 만듭니다., 경보 처리 이력을 남깁니다.]
+    evidence: [탐지 정책, 경보 대응 기록]
+    map: { pipa: [기준 제6조], ismsp: [2.6.1, 2.11.3], iso: [A.8.16] }
+  - id: sys-access
+    need: 서버·네트워크 장비 접근을 허가된 사용자·단말·수단으로 제한하고 불필요한 서비스를 제거한다
+    severity: high
+    effort: M
+    fix: [배스천·접근제어 솔루션으로 경로를 단일화합니다., Telnet 등 취약 프로토콜과 불필요한 포트를 닫습니다., 유휴 세션 자동 종료를 설정합니다.]
+    evidence: [서버 접근통제 정책, 열린 포트 점검 결과]
+    map: { ismsp: [2.6.2], iso: [A.8.3, A.8.9] }
+  - id: app-access
+    need: 응용프로그램에서 업무별로 정보 조회를 제한하고 개인정보 화면표시·출력을 최소화(마스킹)한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [메뉴·데이터 단위 권한을 적용합니다., 출력·다운로드 용도를 특정하고 항목을 줄입니다., 관리자 페이지를 인터넷에 공개하지 않습니다.]
+    evidence: [화면 마스킹 캡처, 출력 용도 관리 기준]
+    map: { pipa: [기준 제12조], ismsp: [2.6.3], iso: [A.8.3, A.8.11] }
+  - id: app-timeout
+    need: 취급자가 일정 시간 업무를 하지 않으면 접속이 자동 차단된다
+    legal: true
+    severity: med
+    effort: S
+    fix: [시스템별 위험을 고려해 세션 유휴시간을 정합니다., 관리자 화면·DB 도구·VPN까지 적용됐는지 시험합니다.]
+    evidence: [세션 만료 설정과 시험 결과]
+    map: { pipa: [기준 제6조], ismsp: [2.6.3], iso: [A.8.5] }
+  - id: db-access
+    need: 데이터베이스의 개인정보 저장 현황을 식별하고 접근을 통제한다
+    severity: high
+    effort: M
+    fix: [테이블별 개인정보·암호화 현황을 목록화합니다., DB 접근제어와 쿼리 로그를 적용합니다., 애플리케이션 계정과 관리자 계정을 분리합니다.]
+    evidence: [DB 개인정보 현황표, DB 접근권한 목록]
+    map: { ismsp: [2.6.4], iso: [A.8.3] }
+  - id: wifi
+    need: 무선 네트워크에 인증·암호화를 적용하고 비인가 AP를 점검한다
+    when: { fact: wireless, is: true }
+    severity: med
+    effort: S
+    fix: [WPA2/WPA3 기업용 인증을 적용합니다., 게스트망을 내부망과 분리합니다., 비인가 AP를 정기 점검합니다.]
+    evidence: [무선 보안 설정, 비인가 AP 점검 기록]
+    map: { ismsp: [2.6.5], iso: [A.8.20] }
+  - id: remote
+    need: 원격 접속을 원칙 제한하고 승인·기간·단말 지정·보안대책을 적용한다
+    when: { fact: remoteAccess, is: true }
+    severity: high
+    effort: M
+    fix: [재택·유지보수 접속 승인 절차와 기간을 정합니다., 지정 단말·VPN·백신 상태를 확인합니다., 접속기록을 정기 검토합니다.]
+    evidence: [원격접속 승인 기록, 원격접속 로그 검토]
+    map: { ismsp: [2.6.6], iso: [A.6.7] }
+  - id: internet-control
+    need: 주요 직무자의 인터넷 접속을 통제하고 유해·업무 외 서비스를 차단한다
+    severity: med
+    effort: M
+    fix: [P2P·웹하드·공유설정을 차단합니다., 서버에서 외부 인터넷 접속을 제한합니다., 생성형 AI·클라우드 저장소 사용 기준을 정합니다.]
+    evidence: [인터넷 차단 정책, 예외 승인]
+    map: { pipa: [기준 제6조], ismsp: [2.6.7], iso: [A.8.12, A.8.23] }
+  - id: net-separation
+    need: 대상 개인정보취급자 컴퓨터를 인터넷망에서 차단했다(예외는 위험 분석과 보호조치 근거 보유)
+    when: { ref: netSeparation }
+    legal: true
+    severity: high
+    effort: L
+    fix: [권한 설정·다운로드·파기 가능 취급자를 식별합니다., 논리·물리 방식으로 차단하고 클라우드는 해당 서비스 외 인터넷을 막습니다., 예외는 기준 제6조의2②와 별표에 따라 위험 분석을 승인받습니다.]
+    evidence: [인터넷망 차단 설정, 대상자 목록, 위험 분석 보고서]
+    map: { pipa: [기준 제6조의2], ismsp: [2.6.7], iso: [A.8.22, A.8.23] }
+  - id: exposure
+    need: 홈페이지·P2P·공유설정·클라우드 저장소에 개인정보가 공개·노출되지 않게 조치하고 노출 시 즉시 삭제·차단한다
+    legal: true
+    severity: high
+    effort: M
+    fix: [공개 버킷·검색엔진·게시판 첨부를 점검합니다., 관리자 페이지 노출과 URL 추측 접근을 시험합니다., KISA 등의 삭제·차단 요청 처리 절차를 만듭니다.]
+    evidence: [노출 점검 결과, 조치 기록]
+    map: { pipa: [기준 제6조, 제34조의2], ismsp: [2.10.3], iso: [A.8.12] }

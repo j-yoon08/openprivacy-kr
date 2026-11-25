@@ -1,0 +1,2 @@
+- { id: PF-1, name: 회원 가입·주문, purpose: 회원 관리와 주문 이행, subjects: 쇼핑몰 회원, items: "이름, 휴대전화번호, 주소, 이메일", legalBasis: 법 제15조①4 계약 이행, source: 본인 입력, retention: 회원 탈퇴 시까지, destruction: DB 영구 삭제, processors: "예시택배(배송), 예시페이(결제)", systems: 쇼핑몰 DB }
+- { id: PF-2, name: 고객 상담, purpose: 문의 처리, subjects: 문의 고객, items: "이름, 연락처, 상담 내용", source: 본인 입력, processors: Example Desk Inc., overseas: "미국, Example Desk Inc., 상담 시 전송", systems: 상담 SaaS }

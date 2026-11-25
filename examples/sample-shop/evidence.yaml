@@ -1,0 +1,1 @@
+- { id: EV-ntp, title: NTP 설정 확인 기록, checks: [log-time], owner: 인프라팀, collectedOn: "2026-11-01", validDays: 365, file: EV-ntp.txt, sha256: e3161258ae2f5b6a00754d828d7866cd8bda7b4deabf4ecb692d064e4849cd4f }

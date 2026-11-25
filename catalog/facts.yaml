@@ -1,0 +1,65 @@
+# 조직의 상황. 비워 두면 "모름"으로 처리되고, 그 값이 필요한 판단은 "확인 필요"로 남습니다.
+groups:
+  - title: 조직
+    facts:
+      - { id: orgName, label: 조직 이름, type: text }
+      - { id: orgType, label: 조직 유형, type: choice, options: { private: 민간기업, public: 공공기관, nonprofit: 비영리법인·단체 } }
+      - { id: sizeClass, label: 기업 규모, type: choice, options: { micro: 소상공인, small: 소기업, medium: 중기업, midcap: 중견기업, large: 대기업, none: 해당 없음(공공·단체 등) }, help: 소상공인이면 소상공인을 고르세요. }
+      - { id: employees, label: 임직원 수, type: number, unit: 명 }
+      - { id: revenue, label: 전년도 전체 매출액(세입), type: number, unit: 억원 }
+      - { id: scopeText, label: 인증·점검 범위, type: text, help: "예: 쇼핑몰 서비스 운영과 이를 지원하는 조직·시스템" }
+      - { id: cpoName, label: 개인정보 보호책임자(CPO) 이름·직책, type: text }
+      - { id: cisoName, label: 정보보호 최고책임자(CISO) 이름·직책, type: text }
+      - { id: contact, label: 개인정보 문의처(부서·전화·메일), type: text }
+      - { id: homepage, label: 홈페이지 주소, type: text }
+  - title: 서비스 유형
+    facts:
+      - { id: onlineService, label: "정보통신서비스 제공자인가요? (웹·앱 서비스 등)", type: bool }
+      - { id: itRevenue, label: 정보통신서비스 부문 전년도 매출액, type: number, unit: 억원 }
+      - { id: dailyUsers, label: 전년도 일일평균 이용자 수, type: number, unit: 명 }
+      - { id: majorIsp, label: 주요정보통신서비스 제공자인가요?, type: bool }
+      - { id: idc, label: 집적정보통신시설(IDC) 사업자인가요?, type: bool }
+      - { id: carrier, label: 등록·신고한 기간통신사업자인가요?, type: bool }
+      - { id: financial, label: 전자금융거래법상 금융회사인가요?, type: bool }
+      - { id: tertiaryHospital, label: 상급종합병원인가요?, type: bool }
+      - { id: hospital, label: 의료기관인가요?, type: bool }
+      - { id: university, label: 고등교육법상 학교인가요?, type: bool }
+      - { id: school, label: 초·중·고 등 각급 학교(대학 포함)인가요?, type: bool }
+      - { id: students, label: 재학생 수(대학원 포함), type: number, unit: 명 }
+      - { id: publicSystem, label: 보호위원회가 지정한 공공시스템을 운영하나요?, type: bool }
+  - title: 개인정보 규모
+    facts:
+      - { id: subjects, label: 개인정보를 처리하는 정보주체 수(전체), type: number, unit: 명 }
+      - { id: storedUsers, label: 저장·관리 중인 이용자 수(전년도 말 직전 3개월 일일평균), type: number, unit: 명 }
+      - { id: externalSubjects, label: 소속 임직원을 뺀 정보주체 수(전년도 말 직전 3개월 일일평균), type: number, unit: 명 }
+      - { id: sensitiveSubjects, label: 민감정보 또는 고유식별정보를 처리하는 정보주체 수, type: number, unit: 명 }
+  - title: 개인정보 처리 형태
+    facts:
+      - { id: rrn, label: 주민등록번호를 처리하나요?, type: bool }
+      - { id: uniqueId, label: "고유식별정보(주민등록·여권·운전면허·외국인등록번호)를 처리하나요?", type: bool }
+      - { id: sensitive, label: "민감정보(건강·사상·생체인식 등)를 처리하나요?", type: bool }
+      - { id: cardAccount, label: 신용카드번호·계좌번호를 저장하나요?, type: bool }
+      - { id: biometric, label: 생체인식정보를 처리하나요?, type: bool }
+      - { id: children, label: 만 14세 미만 아동의 개인정보를 처리하나요?, type: bool }
+      - { id: indirect, label: 정보주체가 아닌 곳에서 개인정보를 수집하나요?, type: bool }
+      - { id: thirdParty, label: 제3자에게 개인정보를 제공하나요?, type: bool }
+      - { id: outsourcing, label: 개인정보 처리업무를 위탁하나요?, type: bool }
+      - { id: overseas, label: "국외 이전(국외 클라우드·해외 본사 조회 포함)이 있나요?", type: bool }
+      - { id: marketing, label: 홍보·마케팅에 개인정보를 이용하나요?, type: bool }
+      - { id: cctv, label: 공개된 장소에 고정형 CCTV를 운영하나요?, type: bool }
+      - { id: mobileCam, label: "이동형 영상기기(드론·바디캠 등)를 업무에 쓰나요?", type: bool }
+      - { id: pseudonym, label: 가명정보를 처리하나요?, type: bool }
+      - { id: autoDecision, label: 사람 개입 없는 자동화된 결정(AI 포함)을 하나요?, type: bool }
+      - { id: transfer, label: 최근 영업양도·합병 등으로 개인정보를 이전했거나 예정인가요?, type: bool }
+      - { id: retainedByLaw, label: 다른 법령 때문에 목적 달성 후에도 보존하는 개인정보가 있나요?, type: bool }
+  - title: IT 환경
+    facts:
+      - { id: cloud, label: 클라우드 서비스를 이용하나요?, type: bool }
+      - { id: development, label: 직접 또는 외주로 시스템을 개발하나요?, type: bool }
+      - { id: mobileApp, label: 이용자용 모바일 앱이 있나요?, type: bool }
+      - { id: serverRoom, label: 자체 전산실·자료보관실이 있나요?, type: bool }
+      - { id: remoteAccess, label: 외부에서 내부 시스템에 원격 접속하나요?, type: bool }
+      - { id: wireless, label: 업무용 무선 네트워크를 쓰나요?, type: bool }
+      - { id: ecommerce, label: 전자거래·핀테크(결제·송금) 기능이 있나요?, type: bool }
+      - { id: publicServer, label: 인터넷에 공개된 서버가 있나요?, type: bool }
+      - { id: contractors, label: 외부자(위탁·파견·유지보수)가 업무에 참여하나요?, type: bool }
