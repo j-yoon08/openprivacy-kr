@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { catalog } from './helpers.ts'
 
 test('세 기준의 모든 조항에 점검 항목이 하나 이상 연결된다', () => {
-  const expected = { pipa: 47, ismsp: 101, iso: 118 }
+  const expected = { pipa: 57, ismsp: 101, iso: 118 }
   for (const fw of catalog.frameworks) {
     assert.equal(fw.requirements.length, expected[fw.id])
     const covered = new Set(catalog.checks.flatMap((c) => c.map[fw.id]))

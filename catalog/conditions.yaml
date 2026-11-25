@@ -55,3 +55,21 @@ uniqueOrSensitive: { any: [{ fact: uniqueId, is: true }, { fact: sensitive, is: 
 encryptTarget: { any: [{ fact: uniqueId, is: true }, { fact: cardAccount, is: true }, { fact: biometric, is: true }] }
 isPublic: { fact: orgType, in: [public] }
 externalParties: { any: [{ fact: contractors, is: true }, { fact: outsourcing, is: true }] }
+domesticAgent: # 법 제31조의2①, 시행령 제32조의3①
+  all:
+    - { fact: foreignOnly, is: true }
+    - any:
+        - { fact: revenue, gte: 10000 }
+        - { fact: domesticSubjects, gte: 1000000 }
+        - { fact: agentOrdered, is: true }
+portabilityNow: # 시행령 제42조의2①2·3, ②
+  any:
+    - { fact: publicSystem, is: true }
+    - { fact: dataSender, is: true }
+portabilitySoon: # 시행령 제42조의2①1 (2027-02-20 시행)
+  all:
+    - { fact: revenue, gt: 1800 }
+    - { fact: school, is: false }
+    - { fact: hospital, is: false }
+    - { ref: sensitiveScale }
+portability: { any: [{ ref: portabilityNow }, { ref: portabilitySoon }] }

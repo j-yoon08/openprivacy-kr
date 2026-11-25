@@ -110,3 +110,23 @@
   basis: 안전성 확보조치 기준 제18조
   required: 공공시스템별로 연 1회 이상 취약점 점검과 외부 전문가 침투테스트를 해야 합니다.
   otherwise: 지정된 공공시스템 운영기관이 아니면 대상이 아닙니다.
+- id: portability
+  title: 개인정보 전송요구 대응
+  when: { ref: portabilityNow }
+  verifyWhen: { all: [{ not: { ref: portabilityNow } }, { ref: portabilitySoon }] }
+  verify: 매출·규모 기준(시행령 제42조의2①1)에 해당하면 2027-02-20부터 본인대상정보전송자가 됩니다. 조문의 평균매출액 산정 방식(중소기업기본법 시행령)으로 다시 확인하세요.
+  basis: 개인정보 보호법 제35조의2, 시행령 제42조의2
+  required: 전송요구 방법을 게재하고, 요구받은 정보를 정해진 방식으로 지체 없이 전송해야 합니다.
+  otherwise: 입력한 값으로는 현재 대상이 아닙니다.
+- id: domestic-agent
+  title: 국내대리인 지정
+  when: { ref: domesticAgent }
+  basis: 개인정보 보호법 제31조의2, 시행령 제32조의3
+  required: 문서로 국내대리인을 지정하고 처리방침에 포함하며, 연 1회 이상 교육하고 업무를 점검해야 합니다.
+  otherwise: 대상이 아닙니다.
+- id: file-register
+  title: 개인정보파일 등록(공공기관)
+  when: { ref: isPublic }
+  basis: 개인정보 보호법 제32조, 시행령 제34조①
+  required: 등록 제외 파일(제32조②)이 아니면 운용을 시작한 날부터 60일 이내에 등록을 신청해야 합니다. 변경도 같습니다.
+  otherwise: 공공기관이 아니면 대상이 아닙니다.

@@ -2,7 +2,7 @@ const token = location.hash.slice(1)
 const statusNames = { gap: '부족', conflict: '답변·점검 불일치', partial: '부분 충족', noEvidence: '증적 부족', needsFact: '상황 확인 필요', unanswered: '미응답', met: '충족', na: '해당 없음' }
 const barOrder = ['met', 'noEvidence', 'partial', 'conflict', 'gap', 'needsFact', 'unanswered']
 const targets = { pipa: '개인정보 보호법', isms: 'ISMS(80개)', ismsp: 'ISMS-P(101개)', iso: 'ISO/IEC 27001' }
-const views = { home: ['현황', home], facts: ['상황 입력', factsView], checks: ['점검', checksView], gaps: ['부족한 점·개선', gapsView], flows: ['처리 흐름', flowsView], risks: ['위험', risksView], evidence: ['증적', evidenceView], docs: ['문서', docsView], sources: ['기준', sourcesView] }
+const views = { home: ['현황', home], facts: ['상황 입력', factsView], checks: ['점검', checksView], gaps: ['부족한 점·개선', gapsView], review: ['상황 검토', reviewView], flows: ['처리 흐름', flowsView], risks: ['위험', risksView], evidence: ['증적', evidenceView], docs: ['문서', docsView], law: ['법령 전문', lawView], sources: ['기준', sourcesView] }
 const filter = { status: '', domain: '', legal: '', fw: '' }
 let state
 let current = 'home'
@@ -101,6 +101,7 @@ function home() {
     a.flowIssues.length ? h('p', {}, h('button', { onclick: () => go('flows') }, `처리 흐름에서 문제 ${a.flowIssues.length}건`)) : null,
     h('h2', {}, '우리 조직에 적용되는 의무'),
     h('div', { class: 'panel' }, table(['판정', '의무', '내용', '근거'], a.obligations.filter((o) => o.status !== 'notRequired').map((o) => [tag(`s-${o.status}`, labels[o.status]), o.title, o.text, o.basis]))),
+    h('p', { class: 'muted small' }, '개인정보 보호법 현황은 점검으로 확인하는 의무 조문만 셉니다. 100%여도 법 전체 준수를 뜻하지 않으며, 개별 사안은 상황 검토에서 전체 조문을 확인하세요.'),
     h('p', { class: 'muted small' }, '자가진단 결과이며 법률 자문이나 인증 심사를 대신하지 않습니다.'),
   ]
 }
@@ -174,12 +175,13 @@ function gapCard(c) {
     h('dl', {}, h('dt', {}, '현재'), h('dd', {}, c.current), h('dt', {}, '부족한 점'), h('dd', {}, c.reason),
       h('dt', {}, '개선 방법'), h('dd', {}, h('ol', {}, c.check.fix.map((f) => h('li', {}, f)))),
       h('dt', {}, '준비할 증적'), h('dd', {}, c.check.evidence.join(', ')), h('dt', {}, '관련 기준'), h('dd', {}, refs(c)),
-      c.fineExposure ? [h('dt', {}, '제재 참고'), h('dd', {}, '과징금 사유 조문(법 제64조의2①)과 관련됩니다. 안전조치 의무는 유출된 경우에 해당합니다.')] : null,
+      c.sanctions.length ? [h('dt', {}, '제재 참고'), h('dd', {}, h('details', {}, h('summary', {}, c.sanctions.map((s) => `법 ${s.article} ${s.item}`).join(', ')), sanctionList(c.sanctions)))] : null,
       c.findings.length ? [h('dt', {}, '기술 점검'), h('dd', {}, c.findings.map((f) => h('div', {}, `${f.title} (${f.scanner} · ${f.target}) ${f.detail}`)))] : null,
       ans?.owner || ans?.due ? [h('dt', {}, '담당·기한'), h('dd', {}, [ans.owner, ans.due].filter(Boolean).join(' · '))] : null),
     h('div', { class: 'row' }, h('button', { onclick: () => { pre.check = c.check.id; go('evidence') } }, '증적 추가'),
       h('button', { onclick: () => { pre.risk = c; go('risks') } }, '위험으로 등록')))
 }
+const sanctionList = (list) => [h('p', { class: 'small muted' }, '조문 단위로 연결한 참고 정보입니다. 해당 여부는 각 호의 요건을 확인하세요.'), list.map((s) => h('p', { class: 'small' }, h('strong', {}, `${s.article} ${s.item} `), s.text.replace(/^\S+\. /, ''), h('span', { class: 'muted' }, ` — ${s.lead.slice(0, 140)}${s.lead.length > 140 ? '…' : ''}`)))]
 const pre = { check: '', risk: null }
 
 function gapsView() {
@@ -268,6 +270,118 @@ function evidenceView() {
     state.data.evidence.length ? h('section', { class: 'panel' }, table(['상태', '증적', '담당자', '만료일', '연결 점검', ''], state.data.evidence.map((e) => { const s = state.evidenceStates[e.id]; return [tag(`s-${s.state}`, names[s.state]), [e.title, e.link ? h('div', { class: 'small muted' }, e.link) : null], e.owner, s.expires, e.checks.join(', '), h('button', { onclick: () => confirm('증적 연결을 삭제할까요? 파일은 evidence 폴더에 남습니다.') && save('evidence', state.data.evidence.filter((x) => x.id !== e.id), true) }, '삭제')] }))) : h('p', { class: 'notice' }, '등록한 증적이 없습니다.'),
     h('h2', {}, '증적 추가'), h('section', { class: 'panel' }, form),
   ]
+}
+
+let law
+async function needLaw() {
+  if (!law) {
+    law = await (await api('/api/law')).json()
+    law.byId = new Map(law.provisions.map((p) => [p.id, p]))
+  }
+  return law
+}
+const roleNames = { check: '점검에 연결', always: '항상 확인', situational: '상황 발생 시', reference: '참고' }
+const tiers = { direct: '직접 관련', always: '항상 확인', related: '함께 볼 조문', confirm: '확인 필요', rest: '나머지' }
+const lawName = (p) => (p.kind === 'addendum' ? p.id : `${p.source === 'law' ? '법 ' : ''}${p.id} ${p.title}${p.text ? '' : ' (시행 예정)'}`)
+function provision(p, reasons) {
+  const d = h('details', { class: 'law' }, h('summary', {}, h('strong', {}, lawName(p)), ' ', h('span', { class: 'small muted' }, reasons ? reasons.join(', ') : `${roleNames[p.role]} · ${p.why}`)))
+  // 전문은 펼칠 때 만들어 조문 수백 개도 빠르게 보입니다
+  d.addEventListener('toggle', () => {
+    if (!d.open || d.dataset.ready) return
+    d.dataset.ready = '1'
+    d.append(...[
+      p.pending && h('p', { class: 'notice' }, `시행 시점 주의: ${p.pending}`),
+      p.text && h('pre', { class: p.kind === 'annex' ? 'text annex' : 'text' }, p.text),
+      p.upcoming && h('div', {}, h('h3', {}, `시행 예정 ${p.upcoming.effective}`), h('pre', { class: 'text' }, p.upcoming.text)),
+      p.implementedBy.length && h('div', {}, h('h3', {}, '세부 규정'), p.implementedBy.map((id) => provision(law.byId.get(id)))),
+      p.sanctions.length && h('div', {}, h('h3', {}, '제재'), sanctionList(p.sanctions)),
+      p.checks.length && h('p', { class: 'small muted' }, `연결된 점검: ${p.checks.join(', ')}`),
+    ].filter(Boolean))
+  })
+  return d
+}
+
+const situation = { title: '', text: '', topics: {}, conclusion: '', result: null }
+function reviewView() {
+  const box = h('div', {}, h('p', {}, '법령 전문을 불러오는 중…'))
+  needLaw().then(() => box.replaceChildren(...reviewBody().flat(9).filter(Boolean))).catch(fail)
+  return [h('h1', {}, '상황 검토'), h('p', { class: 'muted' }, '실제 상황이나 계획을 적으면 개인정보 보호법·시행령·안전성 확보조치 기준의 모든 조문을 나눠 보여 줍니다. 아니오라고 답하지 않은 주제의 조문은 확인 필요로 남깁니다.'), box]
+}
+function topicQuestions(r, run) {
+  const matched = new Map(r.topics.map((t) => [t.id, t.matched]))
+  const set = (patch) => { situation.topics = { ...situation.topics, ...patch }; run() }
+  return [...Map.groupBy(law.topics, (t) => t.group)].map(([g, ts]) => {
+    const open = ts.filter((t) => r.open.includes(t.id))
+    return h('details', { class: 'panel', open: open.length > 0 }, h('summary', {}, h('strong', {}, g), open.length ? ` ${open.length}개 남음` : ' 답변 완료'),
+      ts.map((t) => {
+        const v = situation.topics[t.id] ?? (matched.get(t.id)?.length ? 'yes' : '')
+        return h('div', { class: 'check' }, h('div', {}, t.q, !situation.topics[t.id] && v ? h('div', { class: 'small muted' }, `글에서 찾음: ${matched.get(t.id).join(', ')}`) : null),
+          h('div', { class: 'choices', role: 'radiogroup', 'aria-label': t.q }, [['yes', '예'], ['no', '아니오']].map(([k, l]) => h('label', {}, h('input', { type: 'radio', name: `t-${t.id}`, checked: v === k, onchange: () => set({ [t.id]: k }) }), l))))
+      }),
+      open.length ? h('button', { onclick: () => set(Object.fromEntries(open.map((t) => [t.id, 'no']))) }, '이 묶음의 남은 질문 모두 아니오') : null)
+  })
+}
+function reviewBody() {
+  const bind = (k) => (e) => { situation[k] = e.target.value }
+  const run = async () => {
+    if (!situation.text.trim()) return fail(new Error('상황을 적으세요'))
+    try {
+      situation.result = await (await api('/api/review', { method: 'POST', body: JSON.stringify({ text: situation.text, topics: situation.topics }) })).json()
+      saved.className = ''; saved.textContent = '검토 완료'; draw()
+    } catch (e) { fail(e) }
+  }
+  const download = async (full) => {
+    try {
+      const r = await api('/api/review/document', { method: 'POST', body: JSON.stringify({ title: situation.title || '제목 없음', text: situation.text, topics: situation.topics, conclusion: situation.conclusion, full }) })
+      const url = URL.createObjectURL(await r.blob())
+      h('a', { href: url, download: '상황검토서.md' }).click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { fail(e) }
+  }
+  const keep = () => save('reviews', [...state.data.reviews, { id: `RV-${crypto.randomUUID().slice(0, 8)}`, title: situation.title || '제목 없음', text: situation.text, topics: situation.topics, conclusion: situation.conclusion, createdOn: state.today, lawVersion: law.texts.map((t) => `${t.title} ${t.effective}`).join(', ') }], true)
+  const open = (v) => { Object.assign(situation, { title: v.title, text: v.text, topics: v.topics, conclusion: v.conclusion, result: null }); run() }
+  const r = situation.result
+  const byCheck = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+  return [
+    h('section', { class: 'panel' },
+      field('제목', h('input', { value: situation.title, oninput: bind('title'), placeholder: '예: 해외 상담 SaaS 도입' })),
+      field('상황', h('textarea', { class: 'tall', value: situation.text, oninput: bind('text'), placeholder: '누가 누구의 어떤 개인정보를, 왜, 어떻게, 어디로 처리하는지 적으세요. 실제 개인정보는 적지 마세요.' })),
+      h('p', {}, h('button', { class: 'primary', onclick: run }, '전체 조문 검토'))),
+    r ? [
+      h('h2', {}, `이 상황에 해당하나요? (${r.open.length}개 남음)`),
+      topicQuestions(r, run),
+      h('h2', {}, '찾은 주제와 확인할 질문'),
+      h('section', { class: 'panel' }, r.topics.length ? r.topics.map((t) => h('div', {}, h('strong', {}, t.title), h('span', { class: 'small muted' }, ` ${t.matched.join(', ')}`), h('ul', {}, t.ask.map((q) => h('li', {}, q))))) : h('p', {}, '찾은 주제가 없습니다. 위 질문에 답하거나 더 구체적으로 적으세요.')),
+      r.checks.some((id) => byCheck.has(id)) ? [h('h2', {}, '우리 조직의 관련 점검 상태'), h('section', { class: 'panel' }, table(['상태', '점검'], r.checks.map((id) => byCheck.get(id)).filter((c) => c && c.status !== 'na').map((c) => [tag(`s-${c.status}`, statusNames[c.status]), c.required])))] : null,
+      h('h2', {}, `조문 ${r.items.length}개 전체`),
+      Object.entries(tiers).map(([k, label]) => { const list = r.items.filter((i) => i.tier === k); return h('details', { class: 'panel', open: k === 'direct' }, h('summary', {}, h('strong', {}, `${label} ${list.length}개`)), list.map((i) => provision(law.byId.get(i.id), i.reasons))) }),
+      h('h2', {}, '검토 의견'),
+      h('section', { class: 'panel' }, h('textarea', { 'aria-label': '검토 의견', value: situation.conclusion, oninput: bind('conclusion') }), h('div', { class: 'row' }, h('button', { class: 'primary', onclick: keep }, '검토 저장'), h('button', { onclick: () => download(false) }, '검토서 내려받기'), h('button', { onclick: () => download(true) }, '전체 조문 포함 내려받기'))),
+      h('p', { class: 'muted small' }, '낱말과 조문 연결로 찾은 결과이며 법률 판단이 아닙니다.'),
+    ] : null,
+    state.data.reviews.length ? [h('h2', {}, '저장한 검토'), h('section', { class: 'panel' }, table(['날짜', '제목', '적용 원문(시행일)', ''], state.data.reviews.map((v) => [v.createdOn, v.title, v.lawVersion, h('div', { class: 'row' }, h('button', { onclick: () => open(v) }, '열기'), h('button', { onclick: () => confirm('이 검토를 삭제할까요?') && save('reviews', state.data.reviews.filter((x) => x.id !== v.id), true) }, '삭제'))])))] : null,
+  ]
+}
+
+const lawFilter = { q: '', source: '', role: '' }
+function lawView() {
+  const box = h('div', {}, h('p', {}, '법령 전문을 불러오는 중…'))
+  const list = h('div', {})
+  const fill = () => {
+    const q = lawFilter.q.trim()
+    const hit = law.provisions.filter((p) => (!lawFilter.source || p.source === lawFilter.source) && (!lawFilter.role || p.role === lawFilter.role) && (!q || `${p.id} ${p.title} ${p.text} ${p.upcoming?.text ?? ''}`.includes(q)))
+    const chapters = Map.groupBy(hit, (p) => `${law.texts.find((t) => t.id === p.source).title} · ${p.chapter}`)
+    list.replaceChildren(h('p', { class: 'muted' }, `${hit.length}/${law.provisions.length}개`), ...[...chapters].map(([c, ps]) => h('section', { class: 'panel' }, h('h3', {}, c), ps.map((p) => provision(p)))))
+  }
+  needLaw().then(() => {
+    box.replaceChildren(
+      h('section', { class: 'panel' }, table(['원문', '판', '시행일', '내려받은 날'], law.texts.map((t) => [t.title, t.version, t.effective, t.fetchedOn]))),
+      h('div', { class: 'filters' }, h('input', { type: 'search', 'aria-label': '조문 검색', placeholder: '조문 번호나 낱말', value: lawFilter.q, oninput: (e) => { lawFilter.q = e.target.value; fill() } }),
+        select(lawFilter.source, { '': '모든 원문', law: '법', decree: '시행령', safeguard: '안전성 확보조치 기준' }, (v) => { lawFilter.source = v; fill() }, '원문'),
+        select(lawFilter.role, { '': '모든 역할', ...roleNames }, (v) => { lawFilter.role = v; fill() }, '역할')), list)
+    fill()
+  }).catch(fail)
+  return [h('h1', {}, '법령 전문'), h('p', { class: 'muted' }, '현행 조문, 시행 예정 조문, 별표, 부칙을 모두 담았습니다.'), box]
 }
 
 function docsView() {

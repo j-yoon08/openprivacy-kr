@@ -34,3 +34,6 @@ details > summary { cursor:pointer; } details[open] > summary { margin-bottom:10
 .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:14px 0; }
 .notice { border-left:0; background:var(--soft); border-radius:8px; padding:12px 14px; margin:0 0 14px; }
 @media (max-width:640px) { .summary,.check { grid-template-columns:1fr; } .gap dl { grid-template-columns:1fr; } dt { margin-top:6px; } main { padding:18px 16px 60px; } .top { padding:10px 16px; position:static; } nav { flex:1 0 100%; order:3; } #saved { margin-left:auto; } }
+.law { border-bottom:1px solid var(--line); padding:8px 0; } .law:last-child { border:0; } .law .law { margin-left:14px; }
+pre.text { white-space:pre-wrap; font:inherit; background:var(--soft); border-radius:6px; padding:12px; margin:8px 0; } pre.annex { white-space:pre; overflow-x:auto; font-family:ui-monospace,"D2Coding",Menlo,monospace; font-size:13px; line-height:1.5; }
+textarea.tall { min-height:120px; } .panel > .field { margin-bottom:12px; }

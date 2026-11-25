@@ -71,11 +71,22 @@ const findingSchema = z.strictObject({
   at: z.string(),
 })
 
+const reviewSchema = z.strictObject({
+  id: z.string(),
+  title: z.string().min(1),
+  text: z.string().min(1),
+  topics: z.record(z.string(), z.enum(['yes', 'no'])).default({}),
+  conclusion: z.string().default(''),
+  createdOn: date,
+  lawVersion: z.string().default(''),
+})
+
 export type Profile = z.infer<typeof profileSchema>
 export type Answer = z.infer<typeof answerSchema>
 export type Evidence = z.infer<typeof evidenceSchema>
 export type Flow = z.infer<typeof flowSchema>
 export type Risk = z.infer<typeof riskSchema>
+export type SavedReview = z.infer<typeof reviewSchema>
 export type Finding = z.infer<typeof findingSchema>
 
 export const collections = {
@@ -85,6 +96,7 @@ export const collections = {
   flows: z.array(flowSchema),
   risks: z.array(riskSchema),
   findings: z.array(findingSchema),
+  reviews: z.array(reviewSchema),
 }
 export type CollectionName = keyof typeof collections
 export interface WorkspaceData {
@@ -94,8 +106,9 @@ export interface WorkspaceData {
   flows: Flow[]
   risks: Risk[]
   findings: Finding[]
+  reviews: SavedReview[]
 }
-const empty: WorkspaceData = { profile: { targets: ['pipa', 'ismsp', 'iso'], facts: {} }, answers: {}, evidence: [], flows: [], risks: [], findings: [] }
+const empty: WorkspaceData = { profile: { targets: ['pipa', 'ismsp', 'iso'], facts: {} }, answers: {}, evidence: [], flows: [], risks: [], findings: [], reviews: [] }
 
 export class InputError extends Error {}
 
@@ -176,6 +189,7 @@ export class Workspace {
         for (const f of parsed.data as Finding[]) f.checks.forEach(known)
         break
       case 'flows':
+      case 'reviews':
         break
     }
     return parsed.data

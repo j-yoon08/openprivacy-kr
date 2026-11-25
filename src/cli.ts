@@ -6,6 +6,8 @@ import { assess, statusNames } from './assess.ts'
 import { loadCatalog } from './catalog.ts'
 import { documentKinds, render, type DocumentKind } from './documents.ts'
 import { importProwler, mergeFindings, scanGithub, scanRepo, scanTls } from './scanners.ts'
+import { loadLaw, roleNames } from './law.ts'
+import { heading, renderReview, reviewSituation, tierNames } from './review.ts'
 import { createApp } from './server.ts'
 import { InputError, today, Workspace, type Finding } from './workspace.ts'
 
@@ -16,6 +18,10 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
   init                          작업 폴더 만들기
   serve [--port 4820]           웹 화면 열기(127.0.0.1에만 열림)
   assess [--json] [--strict]    부족한 점과 개선 방법 보기
+  review [--text 글 | --file 파일] [--yes id,id] [--no id,id] [--title 제목] [--full] [-o 파일]
+                                상황을 법·시행령·고시 전체 조문과 대조(주제 ID는 law topics)
+  law [검색어]                  법령 전문 검색(예: law 제34조, law 국외 이전)
+  law coverage | law topics     조문별 역할 요약, 상황 주제 목록
   doc <종류> [-o 파일]          문서 만들기
                                 ${Object.entries(documentKinds).map(([k, [t]]) => `${k}: ${t}`).join('\n                                ')}
   evidence add <파일> --title 제목 --checks id,id [--owner 담당] [--days 365]
@@ -33,7 +39,7 @@ async function main(): Promise<void> {
     allowPositionals: true,
     options: {
       dir: { type: 'string', default: 'openprivacy' }, port: { type: 'string', default: '4820' }, json: { type: 'boolean' }, strict: { type: 'boolean' },
-      output: { type: 'string', short: 'o' }, title: { type: 'string' }, checks: { type: 'string' }, owner: { type: 'string', default: '' }, days: { type: 'string', default: '365' }, help: { type: 'boolean', short: 'h' },
+      output: { type: 'string', short: 'o' }, title: { type: 'string' }, text: { type: 'string' }, file: { type: 'string' }, yes: { type: 'string' }, no: { type: 'string' }, full: { type: 'boolean' }, checks: { type: 'string' }, owner: { type: 'string', default: '' }, days: { type: 'string', default: '365' }, help: { type: 'boolean', short: 'h' },
     },
   })
   const [cmd, sub, arg] = positionals
@@ -123,6 +129,52 @@ async function main(): Promise<void> {
       if (sub !== 'prowler') throw new InputError('import prowler <파일>을 쓰세요')
       ws.load()
       return store(importProwler(JSON.parse(readFileSync(need(arg, 'OCSF JSON 파일'), 'utf8')), catalog))
+    case 'review': {
+      const text = values.text ?? (values.file ? readFileSync(values.file, 'utf8') : '')
+      if (!text.trim()) throw new InputError('--text나 --file로 상황을 적으세요')
+      const book = loadLaw(catalog)
+      const topics = Object.fromEntries([...(values.yes?.split(',') ?? []).map((t) => [t, 'yes'] as const), ...(values.no?.split(',') ?? []).map((t) => [t, 'no'] as const)])
+      for (const t of Object.keys(topics)) if (!book.topics.some((x) => x.id === t)) throw new InputError(`없는 주제: ${t} (law topics로 확인)`)
+      if (values.output) {
+        if (existsSync(values.output)) throw new InputError(`이미 있는 파일입니다: ${values.output}`)
+        writeFileSync(values.output, renderReview(catalog, ws, { title: values.title ?? '제목 없음', text, topics }, today(), !!values.full), { mode: 0o600 })
+        return console.log(`만들었습니다: ${resolve(values.output)}`)
+      }
+      const r = reviewSituation(book, text, topics)
+      if (values.json) return console.log(JSON.stringify(r, null, 2))
+      console.log(`찾은 주제: ${r.topics.map((t) => t.title).join(', ') || '없음(--yes로 고르거나 더 구체적으로 적으세요)'}`)
+      console.log(r.topics.flatMap((t) => t.ask).map((q) => `  ? ${q}`).join('\n'))
+      for (const t of ['direct', 'always', 'related'] as const) {
+        const list = r.items.filter((i) => i.tier === t)
+        console.log(`\n${tierNames[t]} ${list.length}개`)
+        for (const i of list) console.log(`- ${heading(book.byId.get(i.id)!)} — ${i.reasons.join(', ')}`)
+      }
+      console.log(`\n확인 필요 ${r.items.filter((i) => i.tier === 'confirm').length}개 — 아래 질문에 답하면(--yes, --no) 줄어듭니다`)
+      for (const id of r.open) console.log(`  [${id}] ${book.topics.find((t) => t.id === id)!.q}`)
+      console.log(`\n나머지 ${r.items.filter((i) => i.tier === 'rest').length}개 / 전체 ${r.items.length}개. 전문을 포함한 검토서는 -o 파일로 만드세요.`)
+      return
+    }
+    case 'law': {
+      const book = loadLaw(catalog)
+      const query = positionals.slice(1).join(' ')
+      if (query === 'topics') return book.topics.forEach((t) => console.log(`${t.id.padEnd(14)}${t.title} — ${t.q}`))
+      if (query === 'coverage' || !query) {
+        for (const t of book.texts) {
+          const ps = book.provisions.filter((p) => p.source === t.id)
+          const arts = ps.filter((p) => p.kind === 'article')
+          const roles = t.id === 'decree' ? '법 조문에 연결' : (Object.keys(roleNames) as (keyof typeof roleNames)[]).map((r) => `${roleNames[r]} ${arts.filter((p) => p.role === r).length}`).join(', ')
+          console.log(`${t.title} (${t.version}, 시행 ${t.effective}): 현행 ${arts.filter((p) => p.text).length}개 조, 신설 예정 ${arts.filter((p) => !p.text).length}개 조 [${roles}], 별표 ${ps.filter((p) => p.kind === 'annex').length}, 부칙 ${ps.filter((p) => p.kind === 'addendum').length}`)
+        }
+        return
+      }
+      const exact = book.byId.get(query)
+      const found = exact ? [exact] : book.provisions.filter((p) => `${p.id} ${p.title} ${p.text} ${p.upcoming?.text ?? ''}`.includes(query))
+      for (const p of found) {
+        console.log(`\n■ ${heading(p)} [${roleNames[p.role]}: ${p.why}]`)
+        if (exact || found.length <= 3) console.log([p.text, p.upcoming ? `\n(시행 예정 ${p.upcoming.effective})\n${p.upcoming.text}` : '', p.implementedBy.length ? `\n세부 규정: ${p.implementedBy.join(', ')}` : '', p.sanctions.length ? `제재: ${p.sanctions.map((s) => `${s.article} ${s.item}`).join(', ')}` : ''].filter(Boolean).join('\n'))
+      }
+      return console.log(`\n${found.length}건`)
+    }
     case 'sources':
       console.log(`기준 확인일 ${catalog.sources.checkedOn}\n`)
       for (const s of catalog.sources.sources) console.log(`- ${s.title} | ${s.version} | 시행 ${s.effective}\n  ${s.url}`)

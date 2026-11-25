@@ -1,6 +1,6 @@
 {
   "name": "openprivacy-kr",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "우리 조직의 상황을 입력하면 개인정보 보호법·ISMS-P·ISO 27001 기준의 부족한 점과 개선 방법을 알려주는 로컬 우선 오픈소스 도구",
   "license": "Apache-2.0",
   "type": "module",
@@ -28,7 +28,8 @@
     "test": "node --test 'test/*.test.ts'",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "prepack": "pnpm build",
-    "dev": "node src/cli.ts"
+    "dev": "node src/cli.ts",
+    "law:build": "node scripts/build-law.ts"
   },
   "keywords": [
     "pipa",

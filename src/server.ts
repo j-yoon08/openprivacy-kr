@@ -6,13 +6,16 @@ import { z } from 'zod'
 import { assess } from './assess.ts'
 import { root, type Catalog } from './catalog.ts'
 import { documentKinds, render, type DocumentKind } from './documents.ts'
+import { loadLaw } from './law.ts'
+import { renderReview, reviewSituation } from './review.ts'
 import { InputError, today, type CollectionName, type Workspace } from './workspace.ts'
 
 const assets: Record<string, [string, string]> = {
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
 }
-const editable = new Set<string>(['profile', 'answers', 'evidence', 'flows', 'risks'])
+const editable = new Set<string>(['profile', 'answers', 'evidence', 'flows', 'risks', 'reviews'])
+const reviewInput = z.strictObject({ title: z.string().default('제목 없음'), text: z.string().min(1).max(20_000), topics: z.record(z.string(), z.enum(['yes', 'no'])).default({}), conclusion: z.string().default(''), full: z.boolean().default(false) })
 const uploadMeta = z.strictObject({
   title: z.string().min(1), checks: z.array(z.string()).min(1), owner: z.string().default(''), collectedOn: z.iso.date(),
   validDays: z.number().int().positive(), link: z.string().optional(), fileName: z.string().optional(), fileBase64: z.string().optional(),
@@ -57,12 +60,23 @@ export function createApp(ws: Workspace, catalog: Catalog): { server: Server; to
       ws.save(name as CollectionName, JSON.parse((await body(req, 4_000_000)).toString('utf8')))
       return send(res, 200, state())
     }
+    if (req.method === 'GET' && kind === 'law') return send(res, 200, lawView())
+    if (req.method === 'POST' && kind === 'review') {
+      const input = reviewInput.parse(JSON.parse((await body(req, 200_000)).toString('utf8')))
+      if (name !== 'document') return send(res, 200, reviewSituation(loadLaw(catalog), input.text, input.topics))
+      return raw(res, 'text/markdown; charset=utf-8', Buffer.from(renderReview(catalog, ws, input, today(), input.full)))
+    }
     if (req.method === 'POST' && kind === 'evidence') {
       const { fileName, fileBase64, ...meta } = uploadMeta.parse(JSON.parse((await body(req, 30_000_000)).toString('utf8')))
       ws.addEvidence(meta, fileName && fileBase64 ? { name: fileName, bytes: Buffer.from(fileBase64, 'base64') } : undefined)
       return send(res, 200, state())
     }
     send(res, 404, { error: '없는 주소' })
+  }
+
+  function lawView() {
+    const { texts, provisions, topics } = loadLaw(catalog)
+    return { texts, provisions, topics: topics.map(({ id, title, group, q }) => ({ id, title, group, q })) }
   }
 
   function state() {
