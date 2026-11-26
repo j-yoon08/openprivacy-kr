@@ -26,6 +26,11 @@ test('처리방침은 해당 없다고 밝힌 절을 빼고 수탁자를 채운�
   assert.doesNotMatch(md, /국외 이전/)
   assert.match(md, /가나택배 \\\| 배송/)
 })
+test('국내에 주소가 없는 사업자의 처리방침은 국내대리인과 처리 국가를 담는다', () => {
+  const md = (foreignOnly: boolean) => { const { ws } = setup({ foreignOnly }); return render('privacy-policy', catalog, ws, day) }
+  assert.match(md(true), /## \d+\. 국내대리인[\s\S]*전자우편 주소[\s\S]*## \d+\. 개인정보를 처리하는 국가/)
+  assert.doesNotMatch(md(false), /국내대리인|처리하는 국가/)
+})
 test('운영명세서는 101행, SoA는 93행', () => {
   const { ws } = setup()
   const rows = (k: DocumentKind) => render(k, catalog, ws, day).split('\r\n').filter((l) => /^"(\d\.|A\.)/.test(l)).length
@@ -48,6 +53,19 @@ test('소스 점검은 위치만 남기고 값은 남기지 않는다', () => {
   assert.equal(out.find((f) => f.rule === 'weak-password-hash')!.status, 'fail')
   assert.equal(out.find((f) => f.rule === 'private-key')!.status, 'pass')
   assert.ok(!JSON.stringify(out).includes(rrn))
+})
+test('소스 점검은 카드번호(Luhn)·전화번호·하드코딩 비밀값을 찾고 자리표시자와 잠금 파일은 건너뛴다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'op-src-'))
+  const card = ['4111', '1111', '1111', '1111'].join(' ')
+  const secret = ['S3cr3t', 'Prod2024'].join('!')
+  writeFileSync(join(dir, 'a.py'), `c = "${card}"\nbad = "4111 1111 1111 1112"\nt = 1795616857057\np = "010-1234-5678"\ndb_password = "${secret}"\napi_key = "\${API_KEY}"\npassword = "changeme123"\n`)
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), `x: 010-9999-8888\n`)
+  const out = scanRepo(dir)
+  const at = (rule: string) => out.find((f) => f.rule === rule)!
+  assert.equal(at('card').detail, 'a.py:1')
+  assert.equal(at('phone').detail, 'a.py:4')
+  assert.equal(at('hardcoded-secret').detail, 'a.py:5')
+  assert.ok(!JSON.stringify(out).includes(secret) && !JSON.stringify(out).includes(card))
 })
 test('GitHub 점검: 권한이 없어 못 본 설정은 실패가 아니라 확인 불가', async () => {
   const bodies: Record<string, unknown> = { '': { default_branch: 'main' }, '/branches/main': { protected: false } }

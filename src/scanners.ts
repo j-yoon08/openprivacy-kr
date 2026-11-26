@@ -19,13 +19,33 @@ const skipDirs = new Set(['.git', 'node_modules', 'dist', 'build', 'vendor', '.v
 const binary = new Set('.png .jpg .jpeg .gif .webp .ico .pdf .zip .gz .jar .woff .woff2 .ttf .mp4 .mp3 .exe .dll .so .dylib .class .pyc'.split(' '))
 const maxBytes = 1_000_000
 
+/** 카드번호 끝자리 검증(Luhn). 13~19자리만 봅니다. */
+function luhn(d: string): boolean {
+  if (d.length < 13 || d.length > 19 || /^(\d)\1+$/.test(d)) return false
+  let sum = 0
+  for (let i = 0; i < d.length; i++) {
+    let n = +d[d.length - 1 - i]!
+    if (i % 2) { n *= 2; if (n > 9) n -= 9 }
+    sum += n
+  }
+  return sum % 10 === 0
+}
+const placeholder = /^(?:\$\{|\{\{|<|%\(|process\.env|os\.environ|env\(|getenv)|change.?me|example|sample|dummy|placeholder|your[_-]|xxxx|\*\*\*\*|redacted|test|password$/i
+const lockFiles = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'poetry.lock', 'Cargo.lock', 'go.sum', 'composer.lock', 'Gemfile.lock'])
+
 interface SourceRule { id: string; title: string; checks: string[]; pattern: RegExp; accept?: (m: RegExpExecArray) => boolean; only?: Set<string> }
 const codeExt = new Set('.js .mjs .cjs .ts .tsx .jsx .py .java .kt .go .rb .php .cs .swift .rs .scala'.split(' '))
 const sourceRules: SourceRule[] = [
   { id: 'rrn', title: '주민등록번호·외국인등록번호로 보이는 값', checks: ['dev-data', 'cry-store'], pattern: /(?<!\d)(\d{2})(\d{2})(\d{2})-[1-8]\d{6}(?!\d)/g, accept: (m) => +m[2]! >= 1 && +m[2]! <= 12 && +m[3]! >= 1 && +m[3]! <= 31 },
+  { id: 'card', title: '카드번호로 보이는 값(Luhn 검증 통과)', checks: ['dev-data', 'cry-store'], pattern: /(?<![\d-])(?:\d[ -]?){14,18}\d(?![\d-])/g, accept: (m) => luhn(m[0].replace(/\D/g, '')) },
+  { id: 'phone', title: '휴대전화번호로 보이는 값', checks: ['dev-data'], pattern: /(?<![\d-])01[016789][-. ]?\d{3,4}[-. ]?\d{4}(?![\d-])/g },
+  { id: 'driver-license', title: '운전면허번호로 보이는 값', checks: ['dev-data', 'cry-store'], pattern: /(?<![\d-])(?:1[1-9]|2[0-8])-\d{2}-\d{6}-\d{2}(?![\d-])/g },
   { id: 'private-key', title: '개인키 파일·문자열', checks: ['cry-key', 'dev-source'], pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g },
   { id: 'aws-key', title: 'AWS 액세스 키 ID로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])/g },
   { id: 'github-token', title: 'GitHub 토큰으로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g },
+  { id: 'aws-secret', title: 'AWS 비밀 액세스 키로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /aws_?secret_?access_?key["']?\s*[:=]\s*["']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/gi },
+  { id: 'service-token', title: '클라우드·SaaS API 키로 보이는 값(Slack·Google·Stripe·Anthropic·OpenAI)', checks: ['cry-key', 'dev-source'], pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\b[sr]k_live_[0-9A-Za-z]{20,}|\bsk-ant-[A-Za-z0-9_-]{20,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/g },
+  { id: 'hardcoded-secret', title: '소스에 직접 쓴 비밀번호·비밀키 의심', checks: ['cry-key', 'dev-source'], pattern: /(?<![A-Za-z0-9])(?:password|passwd|pwd|secret|api_?key|access_?token|auth_?token|client_?secret|private_?key)["']?\s*[:=]\s*["']([^"'\s]{8,})["']/gi, accept: (m) => !placeholder.test(m[1]!), only: new Set([...codeExt, '.yml', '.yaml', '.json', '.properties', '.ini', '.toml', '.xml', '.conf']) },
   { id: 'weak-password-hash', title: '비밀번호에 취약한 해시(MD5·SHA-1) 사용 의심', checks: ['cry-password'], pattern: /\b(?:md5|sha1)\b[^\n]{0,60}\b(?:password|passwd|pwd)\b|\b(?:password|passwd|pwd)\b[^\n]{0,60}\b(?:md5|sha1)\b/gi, only: codeExt },
   { id: 'tls-verify-off', title: 'TLS 인증서 검증 비활성화', checks: ['cry-transit'], pattern: /rejectUnauthorized\s*:\s*false|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|CURLOPT_SSL_VERIFYPEER\s*,\s*(?:false|0)/g, only: codeExt },
 ]
@@ -46,7 +66,7 @@ export function scanRepo(dir: string): Finding[] {
       const rel = relative(dir, p)
       if (/^\.env(\.|$)/.test(e.name) && !/(example|sample|template)$/.test(e.name)) envFiles.push(rel)
       const ext = extname(e.name).toLowerCase()
-      if (binary.has(ext)) continue
+      if (binary.has(ext) || lockFiles.has(e.name)) continue
       if (lstatSync(p).size > maxBytes) { skipped++; continue }
       const buf = readFileSync(p)
       if (buf.includes(0)) continue

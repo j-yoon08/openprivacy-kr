@@ -42,7 +42,7 @@ node dist/src/cli.js serve --dir ~/my-compliance
 | 위험평가 | 부족한 점을 위험으로 등록하고 처리 계획을 관리 |
 | 증적 | 증적 하나를 여러 기준에 연결하고 만료, 분실, 내용 변경(SHA-256)을 확인 |
 | 문서 초안 | 처리방침, 내부 관리계획(18개 항목), 처리 현황표, ISMS-P 운영명세서, ISO 27001 SoA, 갭 보고서, 개선 과제 |
-| 기술 점검 | 소스(주민등록번호·비밀정보·취약 해시), GitHub 설정, TLS 점검과 Prowler 결과 가져오기 |
+| 기술 점검 | 소스(주민등록·카드·휴대전화·운전면허 번호, 클라우드 키·하드코딩 비밀값, 취약 해시), GitHub 설정, TLS 점검과 Prowler 결과 가져오기 |
 
 ```sh
 node dist/src/cli.js assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2

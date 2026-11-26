@@ -113,6 +113,11 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ['개인정보 보호책임자 및 문의처', `- 개인정보 보호책임자: ${text('cpoName', 'CPO')}\n- 문의처: ${text('contact', '부서·전화·메일')}`],
       ['권익침해 구제 방법', '- 개인정보침해 신고센터: 국번 없이 118 (privacy.kisa.or.kr)\n- 개인정보 분쟁조정위원회: 1833-6972 (kopico.go.kr)'],
     )
+    if (cond('foreignOnly')) {
+      // 법 제31조의2④, 시행령 제31조①4호: 국내에 주소·영업소가 없는 사업자
+      sections.push(['국내대리인', `- 성명(법인은 명칭과 대표자 성명): ${todo('국내대리인 성명')}\n- 주소(법인은 영업소 소재지): ${todo('주소')}\n- 전화번호: ${todo('전화번호')}\n- 전자우편 주소: ${todo('전자우편')}`])
+      sections.push(['개인정보를 처리하는 국가', `국외에서 국내 정보주체의 개인정보를 직접 수집해 처리하는 국가: ${todo('국가명')}`])
+    }
     if (cond('cctv')) sections.push(['고정형 영상정보처리기기 운영·관리', todo('별도 방침이 없으면 목적·장소·대수·보관기간·책임자를 작성')])
     return [`# 개인정보 처리방침`, draft(today), `${org}은(는) 「개인정보 보호법」 제30조에 따라 이 처리방침을 수립·공개합니다.`, ...sections.map(([t, b], i) => `## ${i + 1}. ${t}\n\n${b}`), `## 부칙\n\n이 처리방침은 ${todo('시행일')}부터 적용합니다. 이전 처리방침: ${todo('링크')}`].join('\n\n') + '\n'
   }
