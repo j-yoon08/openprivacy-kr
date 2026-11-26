@@ -169,7 +169,7 @@ function report(catalog: Catalog, a: Assessment, org: string, today: string): st
     out.push([
       `### [${c.priorityName}] ${cell(c.required)}`,
       `- 상태: **${statusNames[c.status]}**${c.legal ? ' · 법적 의무' : ''}`,
-      `- 현재: ${cell(c.current)}`, `- 부족한 점: ${cell(c.reason)}`, `- 관련 기준: ${mapText(c)}`,
+      `- 현재: ${cell(c.current)}${c.answeredAt ? ` (판단일 ${c.answeredAt}${c.stale ? ', 1년 넘음: 재확인 필요' : ''})` : ''}`, `- 부족한 점: ${cell(c.reason)}`, `- 관련 기준: ${mapText(c)}`,
       ...(c.sanctions.length ? [`- 조문 단위 제재 참고: ${c.sanctions.map((s) => `법 ${s.article} ${s.item}`).join(', ')}`] : []),
       `- 개선 방법\n${c.check.fix.map((f, i) => `  ${i + 1}. ${f}`).join('\n')}`,
       `- 준비할 증적: ${c.check.evidence.join(', ')}`,
@@ -177,6 +177,8 @@ function report(catalog: Catalog, a: Assessment, org: string, today: string): st
     ].join('\n'))
   }
   if (a.flowIssues.length) out.push('## 개인정보 처리 흐름의 문제\n\n' + table(['업무', '문제', '개선', '근거'], a.flowIssues.map((f) => [f.name, f.issue, f.fix, f.basis])))
+  const stale = a.checks.filter((c) => c.stale)
+  if (stale.length) out.push(`## 1년 넘게 다시 확인하지 않은 답변 (${stale.length}건)\n\n인증 사후심사·갱신심사는 매년 있으므로, 아래 답변은 현재 상태를 다시 확인하세요.\n\n` + table(['점검', '판단일', '현재 상태'], stale.map((c) => [`${c.check.id} ${c.check.need}`, c.answeredAt!, statusNames[c.status]])))
   const unknown = open(a).filter((c) => ['unanswered', 'needsFact'].includes(c.status))
   out.push(`## 아직 판단하지 못한 항목 (${unknown.length}건)\n\n` + (unknown.map((c) => `- \`${c.check.id}\` ${cell(c.check.need)} — ${c.reason}`).join('\n') || '없음'))
   out.push('## 근거와 변경 주시\n\n' + table(['근거', '판', '시행일'], catalog.sources.sources.map((s) => [s.title, s.version, s.effective])) + '\n\n' + catalog.sources.watch.map((w) => `- **${w.title}**: ${w.detail}`).join('\n'))

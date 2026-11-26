@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { z } from 'zod'
@@ -19,6 +19,8 @@ const answerSchema = z.strictObject({
   note: z.string().default(''),
   owner: z.string().default(''),
   due: z.union([date, z.literal('')]).default(''),
+  /** 값·메모·담당·기한이 마지막으로 바뀐 시각. 서버가 기록하며 입력값은 무시합니다. */
+  at: z.string().optional(),
 })
 const answersSchema = z.record(z.string(), answerSchema)
 const evidenceSchema = z.strictObject({
@@ -143,7 +145,25 @@ export class Workspace {
   }
 
   save(name: CollectionName, value: unknown): void {
-    this.write(name, this.validate(name, value))
+    const valid = this.validate(name, value)
+    if (name === 'answers') this.stampAnswers(valid as Record<string, Answer>)
+    this.write(name, valid)
+  }
+
+  /** 바뀐 답변에 시각을 찍고 changes.jsonl에 덧붙입니다(심사 때 판단 이력 근거). */
+  private stampAnswers(next: Record<string, Answer>): void {
+    const prev = existsSync(this.path('answers')) ? (this.validate('answers', parse(readFileSync(this.path('answers'), 'utf8')) ?? {}) as Record<string, Answer>) : {}
+    const now = new Date().toISOString()
+    const same = (a?: Answer, b?: Answer) => !!a && !!b && a.value === b.value && a.note === b.note && a.owner === b.owner && a.due === b.due
+    const log: string[] = []
+    for (const [id, a] of Object.entries(next)) {
+      const before = prev[id]
+      if (same(before, a)) { if (before!.at) a.at = before!.at; else delete a.at; continue }
+      a.at = now
+      log.push(JSON.stringify({ at: now, check: id, from: before?.value ?? null, to: a.value ?? null, note: a.note, owner: a.owner }))
+    }
+    for (const id of Object.keys(prev)) if (!(id in next)) log.push(JSON.stringify({ at: now, check: id, from: prev[id]!.value ?? null, to: null, note: '답변 삭제', owner: '' }))
+    if (log.length) appendFileSync(join(this.dir, 'changes.jsonl'), log.join('\n') + '\n', { mode: 0o600 })
   }
 
   private path(name: CollectionName): string {

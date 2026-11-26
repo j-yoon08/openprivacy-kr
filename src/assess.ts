@@ -27,6 +27,10 @@ export interface CheckResult {
   frameworks: FrameworkId[]
   evidenceIds: string[]
   findings: Finding[]
+  /** 답변이 마지막으로 바뀐 날(YYYY-MM-DD) */
+  answeredAt?: string
+  /** 답한 지 1년이 넘어 다시 확인해야 하는 답변(인증 사후·갱신심사는 매년) */
+  stale: boolean
 }
 export interface ObligationResult {
   id: string
@@ -74,6 +78,12 @@ function ismsScope(id: string, targets: Target[]): boolean {
   return targets.includes('ismsp') || (targets.includes('isms') && !id.startsWith('3.'))
 }
 
+const yearMs = 365 * 86_400_000
+function answerAge(at: string | undefined, today: string): { answeredAt?: string; stale: boolean } {
+  if (!at || Number.isNaN(Date.parse(at))) return { stale: false }
+  return { answeredAt: at.slice(0, 10), stale: Date.parse(today) - Date.parse(at.slice(0, 10)) > yearMs }
+}
+
 export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, today: string): Assessment {
   const { facts, targets } = data.profile
   const named = catalog.conditions
@@ -102,6 +112,7 @@ export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, tod
       check, ...r, legal, frameworks, priority, priorityName,
       sanctions: legal ? sanctionsFor(book, check.map.pipa) : [],
       evidenceIds: validEvidence.get(check.id) ?? [], findings: failing,
+      ...answerAge(data.answers[check.id]?.at, today),
     })
   }
   checks.sort((a, b) => b.priority - a.priority)

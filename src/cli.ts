@@ -88,6 +88,8 @@ async function main(): Promise<void> {
         }
         for (const i of a.flowIssues) console.log(`\n[처리 흐름] ${i.name}: ${i.issue}\n  → ${i.fix} (${i.basis})`)
         console.log(`\n아직 판단하지 못한 항목 ${a.counts.unanswered + a.counts.needsFact}건`)
+        const stale = a.checks.filter((c) => c.stale)
+        if (stale.length) console.log(`1년 넘게 다시 확인하지 않은 답변 ${stale.length}건: ${stale.map((c) => c.check.id).join(', ')}`)
       }
       if (values.strict && open.some((c) => c.legal)) process.exitCode = 2
       return

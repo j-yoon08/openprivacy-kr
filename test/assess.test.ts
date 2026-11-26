@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { assess } from '../src/assess.ts'
@@ -116,4 +116,20 @@ test('잘못된 입력은 저장하지 않는다', () => {
   assert.throws(() => ws.save('answers', { 'log-time': { value: 3 } }), /yes/)
   assert.throws(() => ws.save('evidence', [{ id: 'x', title: 't', checks: ['log-time'], collectedOn: day, file: '../../etc/passwd' }]), /경로/)
   assert.throws(() => ws.save('evidence', [{ id: 'x', title: 't', checks: ['log-time'], collectedOn: day, link: 'javascript:alert(1)' }]), /http/)
+})
+
+test('답변이 바뀔 때만 시각을 찍고 이력을 남기며, 1년이 지난 답변은 재확인 대상으로 표시한다', () => {
+  const { ws } = setup()
+  ws.save('answers', { 'cry-password': { value: 'yes', at: '2000-01-01T00:00:00.000Z' } })
+  const first = ws.load().answers['cry-password']!.at!
+  assert.notEqual(first, '2000-01-01T00:00:00.000Z', '클라이언트가 보낸 시각은 무시')
+  ws.save('answers', { 'cry-password': { value: 'yes', at: 'x' }, 'cry-transit': { value: 'no' } })
+  assert.equal(ws.load().answers['cry-password']!.at, first, '바뀌지 않은 답변은 시각 유지')
+  const log = readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  assert.deepEqual(log.map((l) => [l.check, l.from, l.to]), [['cry-password', null, 'yes'], ['cry-transit', null, 'no']])
+  const later = new Date(Date.parse(first) + 400 * 86_400_000).toISOString().slice(0, 10)
+  const r = assess(catalog, ws.load(), ws, later).checks.find((c) => c.check.id === 'cry-password')!
+  assert.equal(r.answeredAt, first.slice(0, 10))
+  assert.equal(r.stale, true)
+  assert.equal(assess(catalog, ws.load(), ws, first.slice(0, 10)).checks.find((c) => c.check.id === 'cry-password')!.stale, false)
 })
