@@ -1,5 +1,6 @@
 import type { Catalog, Check, FrameworkId, Obligation } from './catalog.ts'
 import { evaluate, missingFacts } from './condition.ts'
+import { loadLaw, sanctionsFor, type Sanction } from './law.ts'
 import { type Finding, type Flow, type Target, type Workspace, type WorkspaceData } from './workspace.ts'
 
 /**
@@ -16,7 +17,7 @@ export interface CheckResult {
   check: Check
   status: Status
   legal: boolean
-  fineExposure: boolean
+  sanctions: Sanction[]
   current: string
   required: string
   reason: string
@@ -60,9 +61,6 @@ export interface Assessment {
   readiness: number
 }
 
-/** 개인정보 보호법 제64조의2①이 과징금 사유로 열거한 조문 */
-const fineArticles = new Set(['제15조', '제17조', '제18조', '제22조의2', '제23조', '제24조', '제24조의2', '제26조', '제28조의5', '제28조의8', '제29조'])
-
 export function inScope(c: Check, targets: Target[]): FrameworkId[] {
   const out: FrameworkId[] = []
   if (targets.includes('pipa') && c.map.pipa.length) out.push('pipa')
@@ -79,6 +77,7 @@ function ismsScope(id: string, targets: Target[]): boolean {
 export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, today: string): Assessment {
   const { facts, targets } = data.profile
   const named = catalog.conditions
+  const book = loadLaw(catalog)
   const validEvidence = new Map<string, string[]>()
   for (const e of data.evidence) {
     const s = ws.evidenceState(e, today).state
@@ -101,7 +100,7 @@ export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, tod
     const { priority, priorityName } = prioritize(check, r.status, legal)
     checks.push({
       check, ...r, legal, frameworks, priority, priorityName,
-      fineExposure: legal && check.map.pipa.some((a) => fineArticles.has(a) || a.startsWith('기준')),
+      sanctions: legal ? sanctionsFor(book, check.map.pipa) : [],
       evidenceIds: validEvidence.get(check.id) ?? [], findings: failing,
     })
   }

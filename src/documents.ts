@@ -154,6 +154,7 @@ const mapText = (c: CheckResult) => [c.legal || c.frameworks.includes('pipa') ? 
 function report(catalog: Catalog, a: Assessment, org: string, today: string): string {
   const out: string[] = [`# ${org} 갭 분석·개선 보고서`, `- 작성일: ${today}\n- 대상: ${a.targets.map((t) => targetNames[t]).join(', ')}\n- 기준 확인일: ${catalog.sources.checkedOn}\n- 준비도(충족 + 유효 증적): ${a.readiness}%`]
   out.push('> 자가진단 결과이며 법률 자문, 인증 심사, 적합 판정을 대신하지 않습니다.')
+  out.push('> 개인정보 보호법 현황은 점검으로 확인하는 의무 조문만 셉니다. 100%여도 법 전체 준수를 뜻하지 않습니다. 개별 사안은 상황 검토로 전체 조문을 확인하세요.')
   out.push('## 기준별 현황\n\n' + table(['기준', '적용 항목', '충족', '증적 부족', '부분', '부족·불일치', '미응답·확인 필요', '제외'], a.frameworks.map((f) => [f.title, `${f.applicable}/${f.total}`, f.counts.met, f.counts.noEvidence, f.counts.partial, f.counts.gap + f.counts.conflict, f.counts.unanswered + f.counts.needsFact, f.counts.na].map(String))))
   const label = { required: '해당', verify: '확인 필요', notRequired: '비해당' }
   out.push('## 우리 조직의 법적 의무\n\n' + table(['의무', '판정', '내용', '근거'], a.obligations.filter((o) => o.status !== 'notRequired').map((o) => [o.title, label[o.status], o.text, o.basis])))
@@ -162,8 +163,9 @@ function report(catalog: Catalog, a: Assessment, org: string, today: string): st
   for (const c of found) {
     out.push([
       `### [${c.priorityName}] ${cell(c.required)}`,
-      `- 상태: **${statusNames[c.status]}**${c.legal ? ' · 법적 의무' : ''}${c.fineExposure ? ' · 과징금 사유 조문 관련(안전조치는 유출 시)' : ''}`,
+      `- 상태: **${statusNames[c.status]}**${c.legal ? ' · 법적 의무' : ''}`,
       `- 현재: ${cell(c.current)}`, `- 부족한 점: ${cell(c.reason)}`, `- 관련 기준: ${mapText(c)}`,
+      ...(c.sanctions.length ? [`- 조문 단위 제재 참고: ${c.sanctions.map((s) => `법 ${s.article} ${s.item}`).join(', ')}`] : []),
       `- 개선 방법\n${c.check.fix.map((f, i) => `  ${i + 1}. ${f}`).join('\n')}`,
       `- 준비할 증적: ${c.check.evidence.join(', ')}`,
       ...c.findings.map((f) => `- 기술 점검 발견: ${cell(f.title)} (${f.scanner}, ${cell(f.target)})`),

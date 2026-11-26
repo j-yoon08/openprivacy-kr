@@ -26,12 +26,17 @@ groups:
       - { id: university, label: 고등교육법상 학교인가요?, type: bool }
       - { id: school, label: 초·중·고 등 각급 학교(대학 포함)인가요?, type: bool }
       - { id: students, label: 재학생 수(대학원 포함), type: number, unit: 명 }
+      - { id: evalTarget, label: "공공기관 개인정보 보호수준 평가 대상 기관인가요?", type: bool }
+      - { id: dataSender, label: "전송요구권의 제3자대상정보전송자(보건의료·통신·에너지)인가요?", type: bool }
+      - { id: foreignOnly, label: 국내에 주소나 영업소가 없는 사업자인가요?, type: bool }
+      - { id: agentOrdered, label: 보호위원회가 국내대리인 지정이 필요하다고 의결했나요?, type: bool }
       - { id: publicSystem, label: 보호위원회가 지정한 공공시스템을 운영하나요?, type: bool }
   - title: 개인정보 규모
     facts:
       - { id: subjects, label: 개인정보를 처리하는 정보주체 수(전체), type: number, unit: 명 }
       - { id: storedUsers, label: 저장·관리 중인 이용자 수(전년도 말 직전 3개월 일일평균), type: number, unit: 명 }
       - { id: externalSubjects, label: 소속 임직원을 뺀 정보주체 수(전년도 말 직전 3개월 일일평균), type: number, unit: 명 }
+      - { id: domesticSubjects, label: 국내 정보주체 수(전년도 말 직전 3개월 일일평균), type: number, unit: 명 }
       - { id: sensitiveSubjects, label: 민감정보 또는 고유식별정보를 처리하는 정보주체 수, type: number, unit: 명 }
   - title: 개인정보 처리 형태
     facts:
@@ -42,6 +47,7 @@ groups:
       - { id: biometric, label: 생체인식정보를 처리하나요?, type: bool }
       - { id: children, label: 만 14세 미만 아동의 개인정보를 처리하나요?, type: bool }
       - { id: indirect, label: 정보주체가 아닌 곳에서 개인정보를 수집하나요?, type: bool }
+      - { id: receivesData, label: 다른 개인정보처리자에게서 개인정보를 제공받나요?, type: bool }
       - { id: thirdParty, label: 제3자에게 개인정보를 제공하나요?, type: bool }
       - { id: outsourcing, label: 개인정보 처리업무를 위탁하나요?, type: bool }
       - { id: overseas, label: "국외 이전(국외 클라우드·해외 본사 조회 포함)이 있나요?", type: bool }
@@ -49,6 +55,7 @@ groups:
       - { id: cctv, label: 공개된 장소에 고정형 CCTV를 운영하나요?, type: bool }
       - { id: mobileCam, label: "이동형 영상기기(드론·바디캠 등)를 업무에 쓰나요?", type: bool }
       - { id: pseudonym, label: 가명정보를 처리하나요?, type: bool }
+      - { id: pseudonymCombine, label: 다른 기관과 가명정보를 결합하나요?, type: bool }
       - { id: autoDecision, label: 사람 개입 없는 자동화된 결정(AI 포함)을 하나요?, type: bool }
       - { id: transfer, label: 최근 영업양도·합병 등으로 개인정보를 이전했거나 예정인가요?, type: bool }
       - { id: retainedByLaw, label: 다른 법령 때문에 목적 달성 후에도 보존하는 개인정보가 있나요?, type: bool }
