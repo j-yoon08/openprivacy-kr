@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { assess, statusNames } from './assess.ts'
 import { loadCatalog } from './catalog.ts'
 import { documentKinds, render, type DocumentKind } from './documents.ts'
+import { exportEvidence } from './export.ts'
 import { importProwler, mergeFindings, scanGithub, scanRepo, scanTls, scanWeb } from './scanners.ts'
 import { loadLaw, roleNames } from './law.ts'
 import { heading, renderReview, reviewSituation, tierNames } from './review.ts'
@@ -27,6 +28,7 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
                                 ${Object.entries(documentKinds).map(([k, [t]]) => `${k}: ${t}`).join('\n                                ')}
   evidence add <파일> --title 제목 --checks id,id [--owner 담당] [--days 365]
   evidence status               만료·분실·변경된 증적 보기
+  export evidence -o <폴더>     심사 제출용 증적 묶음(파일 사본, 증적 목록, ISMS-P 항목별 증적표)
   scan repo <폴더>              소스의 개인정보·비밀정보·취약 설정 점검
   scan github <owner/repo>      저장소 보안 설정 점검(GITHUB_TOKEN 사용)
   scan tls <host[:port]>        TLS·인증서 점검(권한이 있는 대상만)
@@ -94,6 +96,12 @@ async function main(): Promise<void> {
         if (stale.length) console.log(`1년 넘게 다시 확인하지 않은 답변 ${stale.length}건: ${stale.map((c) => c.check.id).join(', ')}`)
       }
       if (values.strict && open.some((c) => c.legal)) process.exitCode = 2
+      return
+    }
+    case 'export': {
+      if (sub !== 'evidence') throw new InputError('export evidence -o <폴더>를 쓰세요')
+      const r = exportEvidence(catalog, ws, need(values.output, '-o <폴더>'), today())
+      console.log(`증적 파일 ${r.files}개를 복사했습니다${r.skipped ? `(파일이 없거나 내용이 바뀐 ${r.skipped}개는 목록에만 표시)` : ''}: ${resolve(values.output!)}`)
       return
     }
     case 'next': {

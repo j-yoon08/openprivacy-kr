@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { csv, documentKinds, render, type DocumentKind } from '../src/documents.ts'
+import { exportEvidence } from '../src/export.ts'
 import { importProwler, mergeFindings, scanGithub, scanRepo, scanWeb, visibleText } from '../src/scanners.ts'
 import { createApp } from '../src/server.ts'
 import { catalog, day, setup } from './helpers.ts'
@@ -185,4 +186,21 @@ test('로컬 서버: 토큰·Host·Origin이 틀리면 거부하고, 맞으면 �
   assert.equal((await call('/api/documents/constructor', ok)).status, 404)
   assert.ok(!(await call('/')).text.includes(token))
   server.close()
+})
+
+test('증적 묶음: 유효한 파일만 복사하고, 목록과 ISMS-P 항목별 증적표에 상태와 빈 곳을 남긴다', () => {
+  const { ws } = setup()
+  const src = mkdtempSync(join(tmpdir(), 'op-ev-'))
+  writeFileSync(join(src, 'policy.pdf'), 'v1')
+  writeFileSync(join(src, 'log.txt'), 'x')
+  const ok = ws.addEvidence({ title: '정책', checks: ['gov-policy'], owner: '', collectedOn: day, validDays: 365 }, { path: join(src, 'policy.pdf') })
+  const bad = ws.addEvidence({ title: '로그', checks: ['log-review'], owner: '', collectedOn: day, validDays: 365 }, { path: join(src, 'log.txt') })
+  writeFileSync(join(ws.dir, 'evidence', bad.file!), 'changed')
+  const out = join(mkdtempSync(join(tmpdir(), 'op-out-')), 'pack')
+  assert.deepEqual(exportEvidence(catalog, ws, out, day), { files: 1, skipped: 1 })
+  assert.deepEqual(readdirSync(join(out, 'files')), [ok.file!.startsWith(ok.id) ? ok.file : `${ok.id}-${ok.file}`])
+  const list = readFileSync(join(out, '증적목록.csv'), 'utf8')
+  assert.match(list, /내용 변경됨/)
+  assert.match(readFileSync(join(out, 'ISMS-P_항목별_증적.csv'), 'utf8'), new RegExp(`"1\\.1\\.5","정책 수립",[^\\n]*${ok.id} 정책`))
+  assert.throws(() => exportEvidence(catalog, ws, out, day), /비어 있지 않은 폴더/)
 })

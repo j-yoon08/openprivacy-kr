@@ -48,11 +48,12 @@ node dist/src/cli.js serve --dir examples/sample-shop
 | 상황 검토 | 실제 상황을 적고 질문에 답하면 전체 조문을 직접 관련, 항상 확인, 함께 볼 조문, 확인 필요, 나머지로 나눔 |
 | 처리 흐름 | 업무별 개인정보 흐름의 누락과 입력 모순(근거 없는 주민등록번호 등)을 탐지 |
 | 위험평가 | 부족한 점을 위험으로 등록하고 처리 계획을 관리 |
-| 증적 | 증적 하나를 여러 기준에 연결하고 만료, 분실, 내용 변경(SHA-256)을 확인 |
+| 증적 | 증적 하나를 여러 기준에 연결하고 만료, 분실, 내용 변경(SHA-256)을 확인. `export evidence -o 폴더`로 심사 제출용 묶음(파일 사본, 증적 목록, ISMS-P 항목별 증적표)을 만듦 |
 | 문서 초안 | 처리방침, 내부 관리계획(18개 항목), 처리 현황표, ISMS-P 운영명세서(고시 원문과 요건별 상태), ISO 27001 SoA, 갭 보고서, 개선 과제 |
 | 기술 점검 | 소스(주민등록·카드·휴대전화·운전면허 번호, 클라우드 키·하드코딩 비밀값, 취약 해시), GitHub 설정, TLS, 웹사이트(HTTPS 전환·HSTS·쿠키·처리방침 표시) 점검과 Prowler 결과 가져오기 |
 
 ```sh
+openprivacy-kr next --dir ~/my-compliance                  # 어디부터 답할지
 openprivacy-kr assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2
 openprivacy-kr doc report --dir ~/my-compliance -o report.md
 openprivacy-kr review --text "해외 상담 SaaS에 회원 문의를 저장하려 한다" --dir ~/my-compliance -o review.md
