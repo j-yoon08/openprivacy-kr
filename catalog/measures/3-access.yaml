@@ -250,6 +250,7 @@ checks:
     map: { ismsp: [2.6.4], iso: [A.5.9] }
   - id: net-rogue-ap
     need: AD Hoc 접속과 비인가 AP를 탐지·차단하는 대책(정기 점검·무선 침입방지 등)을 운영한다
+    when: { fact: wireless, is: true }
     severity: low
     effort: S
     fix: [인가된 AP 목록을 관리합니다., 정기적으로 무선 신호를 점검해 비인가 AP를 찾습니다., 업무용 단말의 AD Hoc 연결과 핫스팟 사용을 제한합니다.]
