@@ -74,6 +74,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -300,7 +301,7 @@ main {
   scroll-margin-top: 56px;
 }
 
-h2[id], .check, details.law, details.gap-row, details.topic-group {
+h2[id], .check, details.law, details.gap-row, details.topic-group, details.crit-item {
   scroll-margin-top: 58px;
 }
 
@@ -517,7 +518,7 @@ label.check-opt:has(:checked) {
   background: var(--bad-bg);
   border-color: var(--bad-line);
 }
-.s-partial, .p-높음, .s-verify, .s-expiring, .s-upcoming {
+.s-partial, .p-높음, .s-verify, .s-expiring, .s-upcoming, .s-stale {
   color: var(--warn);
   background: var(--warn-bg);
   border-color: var(--warn-line);
@@ -1225,6 +1226,153 @@ mark.hl {
 .risk-mid { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
 .risk-lo { background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
 
+.check-date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ISMS-P Criteria View */
+.ismsp-area {
+  margin-top: 20px;
+}
+.ismsp-area:first-child {
+  margin-top: 0;
+}
+.ismsp-area-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.ismsp-area-head h2 {
+  margin: 0;
+}
+.ismsp-area-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ismsp-area-bar {
+  width: 120px;
+}
+
+.crit-group {
+  padding: 0;
+  overflow: hidden;
+}
+.crit-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.crit-item {
+  border-bottom: 1px solid var(--line);
+}
+.crit-item:last-child {
+  border-bottom: 0;
+}
+.crit-sum {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.crit-sum:hover {
+  background: var(--soft);
+}
+.crit-item[open] > .crit-sum {
+  background: var(--soft);
+  border-bottom: 1px solid var(--line);
+}
+.crit-sum-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.crit-sum-top {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+}
+.crit-id {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.crit-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.crit-chevron {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.crit-item[open] > .crit-sum .crit-chevron::before { content: "접기"; }
+.crit-item:not([open]) > .crit-sum .crit-chevron::before { content: "자세히"; }
+
+.crit-body {
+  padding: 12px 14px 14px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.crit-body .law-subhead {
+  margin-top: 0;
+}
+.panel-action-row {
+  margin-bottom: 10px;
+}
+.crit-official {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+.crit-points {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.crit-point {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.crit-point-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.crit-point-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  min-width: 0;
+}
+
 .disclaimer-stack {
   margin-top: 20px;
   padding-top: 12px;
@@ -1293,6 +1441,7 @@ mark.hl {
   .chip-btn,
   label.check-opt,
   .gap-summary,
+  .crit-sum,
   .law > summary,
   .sub-disclosure > summary,
   .facts-toc a,
@@ -1315,6 +1464,9 @@ mark.hl {
   .gap-dl dt:first-child { margin-top: 0; }
   .filters { grid-template-columns: minmax(0, 1fr); }
   .grid { grid-template-columns: minmax(0, 1fr); }
+  .linked-check-row { grid-template-columns: minmax(0, 1fr); }
+  .crit-point-head { flex-direction: column; gap: 4px; }
+  .ismsp-area-bar { width: 100%; }
   #saved { max-width: 120px; }
   main { padding: 14px 12px 60px; }
 }
