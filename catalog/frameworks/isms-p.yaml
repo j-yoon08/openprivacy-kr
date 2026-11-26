@@ -544,7 +544,7 @@ requirements:
     group: "보호대책 요구사항"
     text: "정보시스템의 취약점이 노출되어 있는지를 확인하기 위하여 정기적으로 취약점 점검을 수행하고 발견된 취약점에 대해서는 신속하게 조치하여야 한다. 또한 최신 보안취약점의 발생 여부를 지속적으로 파악하고 정보시스템에 미치는 영향을 분석하여 조치하여야 한다."
     points:
-      - { text: "정기적 취약점 점검 수행", checks: [inc-vuln, inc-public-pentest] }
+      - { text: "정기적 취약점 점검 수행", checks: [inc-vuln, inc-public-pentest, pub-vuln] }
       - { text: "발견된 취약점 신속 조치", checks: [inc-vuln-fix] }
       - { text: "최신 보안취약점 발생 여부 파악과 영향 분석·조치", checks: [inc-vuln-intel] }
   - id: "2.11.3"

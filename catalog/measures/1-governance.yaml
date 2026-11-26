@@ -452,7 +452,7 @@ checks:
     evidence: [CPO 독립성 보장 규정, 대표자·이사회 보고 기록]
     map: { pipa: [제31조] }
   - id: gov-domestic-agent-cycle
-    need: 국내대리인에게 업무 교육을 하고 업무 계획 수립·이행을 점검하는 주기
+    need: 국내대리인에게 업무 교육을 하는 주기(업무 계획 수립·이행과 개선 여부도 점검)
     when: { ref: domesticAgent }
     legal: true
     severity: med
