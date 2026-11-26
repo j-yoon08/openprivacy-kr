@@ -1627,6 +1627,14 @@ function reviewView() {
         }
       }
 
+      const isUnmatchedOpen = (curR, t) => {
+        if (situation.topics[t.id]) return false
+        const topicHit = curR.topics.find((x) => x.id === t.id)
+        if (topicHit?.matched?.length) return false
+        if (curR.overruled.some((o) => o.title === t.title && o.matched.length)) return false
+        return curR.open.includes(t.id)
+      }
+
       const groupNodes = groups.map(([groupName, ts], gIdx) => {
         const openInGroup = ts.filter((t) => r.open.includes(t.id))
         const badgeEl = h('span', { class: 'tag s-partial num' })
@@ -1701,7 +1709,7 @@ function reviewView() {
             'data-bulk-group': groupName,
             onclick: () => {
               const curR = situation.result
-              const remaining = ts.filter((t) => curR.open.includes(t.id) && !situation.topics[t.id])
+              const remaining = ts.filter((t) => isUnmatchedOpen(curR, t))
               if (!remaining.length) return
               const patch = Object.fromEntries(remaining.map((t) => [t.id, 'no']))
               applyTopicPatch(patch)
@@ -1709,9 +1717,7 @@ function reviewView() {
               let moved = false
               for (let offset = 1; offset < groupRefs.length; offset++) {
                 const nextG = (gIdx + offset) % groupRefs.length
-                const candidate = groupRefs[nextG].topics.find(
-                  (t) => curR.open.includes(t.id) && !situation.topics[t.id],
-                )
+                const candidate = groupRefs[nextG].topics.find((t) => isUnmatchedOpen(curR, t))
                 if (candidate) {
                   groupRefs[nextG].detailsEl.open = true
                   topicRefs.get(candidate.id)?.yesBtn.focus()
@@ -1722,7 +1728,7 @@ function reviewView() {
               if (!moved) summaryEl.focus()
             },
           },
-          '남은 질문 모두 아니오',
+          '찾지 못한 남은 질문 모두 아니오',
         )
 
         groupRefs.push({ groupName, topics: ts, detailsEl, summaryEl, badgeEl, bulkBtn })
@@ -1871,7 +1877,7 @@ function reviewView() {
           const explicit = situation.topics[t.id]
           const matched = matchedMap.get(t.id) ?? []
           const overruledMatched = overruledMap.get(t.title) ?? []
-          const isTopicOpen = !explicit && matched.length === 0 && r.open.includes(t.id)
+          const isTopicOpen = !explicit && matched.length === 0 && overruledMatched.length === 0 && r.open.includes(t.id)
           if (isTopicOpen) openInGroup++
 
           if (explicit === 'yes') {
@@ -1930,7 +1936,7 @@ function reviewView() {
         g.badgeEl.className = `tag num ${openInGroup ? 's-partial' : 's-met'}`
         g.badgeEl.textContent = openInGroup ? `${openInGroup}개 남음` : `완료${yesInGroup ? ` · 예 ${yesInGroup}` : ''}`
         g.bulkBtn.disabled = openInGroup === 0
-        g.bulkBtn.textContent = openInGroup ? `남은 ${openInGroup}개 모두 아니오` : '남은 질문 없음'
+        g.bulkBtn.textContent = '찾지 못한 남은 질문 모두 아니오'
       }
 
       ws.qCountTag.className = `tag num ${openTotal ? 's-partial' : 's-met'}`
