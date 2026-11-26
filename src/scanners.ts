@@ -30,22 +30,25 @@ function luhn(d: string): boolean {
   }
   return sum % 10 === 0
 }
-const placeholder = /^(?:\$\{|\{\{|<|%\(|process\.env|os\.environ|env\(|getenv)|change.?me|example|sample|dummy|placeholder|your[_-]|xxxx|\*\*\*\*|redacted|test|password$/i
+const placeholder = /^(?:\$\{|\{\{|<|%\(|process\.env|os\.environ|env\(|getenv|[./~])|change.?me|example|dummy|placeholder|your[_-]|xxxx|\*\*\*\*|redacted|^(?:test|sample|password|secret)\w{0,4}$|\.(?:pem|key|crt|p12|jks)$/i
+const configExt = new Set(['.yml', '.yaml', '.properties', '.ini', '.toml', '.conf', '.env', '.cfg'])
+const secretKey = String.raw`[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key)[A-Za-z0-9_.-]*`
 const lockFiles = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'poetry.lock', 'Cargo.lock', 'go.sum', 'composer.lock', 'Gemfile.lock'])
 
 interface SourceRule { id: string; title: string; checks: string[]; pattern: RegExp; accept?: (m: RegExpExecArray) => boolean; only?: Set<string> }
 const codeExt = new Set('.js .mjs .cjs .ts .tsx .jsx .py .java .kt .go .rb .php .cs .swift .rs .scala'.split(' '))
 const sourceRules: SourceRule[] = [
   { id: 'rrn', title: '주민등록번호·외국인등록번호로 보이는 값', checks: ['dev-data', 'cry-store'], pattern: /(?<!\d)(\d{2})(\d{2})(\d{2})-[1-8]\d{6}(?!\d)/g, accept: (m) => +m[2]! >= 1 && +m[2]! <= 12 && +m[3]! >= 1 && +m[3]! <= 31 },
-  { id: 'card', title: '카드번호로 보이는 값(Luhn 검증 통과)', checks: ['dev-data', 'cry-store'], pattern: /(?<![\d-])(?:\d[ -]?){14,18}\d(?![\d-])/g, accept: (m) => luhn(m[0].replace(/\D/g, '')) },
-  { id: 'phone', title: '휴대전화번호로 보이는 값', checks: ['dev-data'], pattern: /(?<![\d-])01[016789][-. ]?\d{3,4}[-. ]?\d{4}(?![\d-])/g },
+  { id: 'card', title: '카드번호로 보이는 값(Luhn 검증 통과)', checks: ['dev-data', 'cry-store'], pattern: /(?<![\w.-])[2-69]\d{3}([ -]?)\d{4}\1\d{4}\1\d{1,7}(?![\w.-])/g, accept: (m) => luhn(m[0].replace(/\D/g, '')) },
+  { id: 'phone', title: '휴대전화번호로 보이는 값', checks: ['dev-data'], pattern: /(?<![\w.-])01[016789]([-. ]?)\d{3,4}\1\d{4}(?![\w.-])/g },
   { id: 'driver-license', title: '운전면허번호로 보이는 값', checks: ['dev-data', 'cry-store'], pattern: /(?<![\d-])(?:1[1-9]|2[0-8])-\d{2}-\d{6}-\d{2}(?![\d-])/g },
   { id: 'private-key', title: '개인키 파일·문자열', checks: ['cry-key', 'dev-source'], pattern: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g },
   { id: 'aws-key', title: 'AWS 액세스 키 ID로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])/g },
   { id: 'github-token', title: 'GitHub 토큰으로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g },
-  { id: 'aws-secret', title: 'AWS 비밀 액세스 키로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /aws_?secret_?access_?key["']?\s*[:=]\s*["']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/gi },
-  { id: 'service-token', title: '클라우드·SaaS API 키로 보이는 값(Slack·Google·Stripe·Anthropic·OpenAI)', checks: ['cry-key', 'dev-source'], pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\b[sr]k_live_[0-9A-Za-z]{20,}|\bsk-ant-[A-Za-z0-9_-]{20,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/g },
-  { id: 'hardcoded-secret', title: '소스에 직접 쓴 비밀번호·비밀키 의심', checks: ['cry-key', 'dev-source'], pattern: /(?<![A-Za-z0-9])(?:password|passwd|pwd|secret|api_?key|access_?token|auth_?token|client_?secret|private_?key)["']?\s*[:=]\s*["']([^"'\s]{8,})["']/gi, accept: (m) => !placeholder.test(m[1]!), only: new Set([...codeExt, '.yml', '.yaml', '.json', '.properties', '.ini', '.toml', '.xml', '.conf']) },
+  { id: 'aws-secret', title: 'AWS 비밀 액세스 키로 보이는 값', checks: ['cry-key', 'dev-source'], pattern: /aws[_-]?secret[_-]?access[_-]?key["']?\s*[:=]\s*["']?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/gi },
+  { id: 'service-token', title: '클라우드·SaaS API 키로 보이는 값(Slack·Google·Stripe·Anthropic·OpenAI)', checks: ['cry-key', 'dev-source'], pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])|\b[sr]k_live_[0-9A-Za-z]{20,}|\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}/g, accept: (m) => !m[0].startsWith('sk-') || (/\d/.test(m[0]) && /[A-Z]/.test(m[0])) },
+  { id: 'hardcoded-secret', title: '소스에 직접 쓴 비밀번호·비밀키 의심', checks: ['cry-key', 'dev-source'], pattern: new RegExp(String.raw`(?<![A-Za-z0-9_.-])${secretKey}["']?\s*[:=]\s*["'\x60]([^"'\x60\s]{8,})["'\x60]`, 'gi'), accept: (m) => !placeholder.test(m[1]!), only: new Set([...codeExt, ...configExt, '.json', '.xml']) },
+  { id: 'config-secret', title: '설정 파일에 따옴표 없이 쓴 비밀번호·비밀키 의심', checks: ['cry-key', 'dev-source'], pattern: new RegExp(String.raw`^[ \t]*(?:export[ \t]+)?${secretKey}[ \t]*[:=][ \t]*([^"'\x60\s#]{8,})[ \t]*$`, 'gim'), accept: (m) => !placeholder.test(m[1]!), only: configExt },
   { id: 'weak-password-hash', title: '비밀번호에 취약한 해시(MD5·SHA-1) 사용 의심', checks: ['cry-password'], pattern: /\b(?:md5|sha1)\b[^\n]{0,60}\b(?:password|passwd|pwd)\b|\b(?:password|passwd|pwd)\b[^\n]{0,60}\b(?:md5|sha1)\b/gi, only: codeExt },
   { id: 'tls-verify-off', title: 'TLS 인증서 검증 비활성화', checks: ['cry-transit'], pattern: /rejectUnauthorized\s*:\s*false|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|CURLOPT_SSL_VERIFYPEER\s*,\s*(?:false|0)/g, only: codeExt },
 ]
@@ -65,7 +68,7 @@ export function scanRepo(dir: string): Finding[] {
       if (!e.isFile()) continue
       const rel = relative(dir, p)
       if (/^\.env(\.|$)/.test(e.name) && !/(example|sample|template)$/.test(e.name)) envFiles.push(rel)
-      const ext = extname(e.name).toLowerCase()
+      const ext = /^\.env(\.|$)/.test(e.name) ? '.env' : extname(e.name).toLowerCase()
       if (binary.has(ext) || lockFiles.has(e.name)) continue
       if (lstatSync(p).size > maxBytes) { skipped++; continue }
       const buf = readFileSync(p)
@@ -117,42 +120,110 @@ export async function scanGithub(repo: string, token: string | undefined, get: F
   return stamp('github', repo, list)
 }
 
-export type WebFetch = (url: string, init: { redirect: 'manual' | 'follow'; headers: Record<string, string> }) => Promise<{ status: number; url: string; headers: Headers; text(): Promise<string> }>
+export interface WebResponse { status: number; url: string; headers: Headers; body: ReadableStream<Uint8Array> | null }
+export type WebFetch = (url: string, init: { redirect: 'manual' | 'follow'; headers: Record<string, string>; signal: AbortSignal }) => Promise<WebResponse>
 
-/** 웹사이트 첫 화면 점검: HTTPS 전환, HSTS, 쿠키 속성, 처리방침 링크(시행령 제31조②). 첫 페이지만 요청합니다. */
-export async function scanWeb(target: string, get: WebFetch = fetch): Promise<Finding[]> {
+const maxPage = 2_000_000
+/** 본문을 최대 maxPage 바이트까지만 읽습니다(압축 폭탄·거대 응답 방지). */
+async function readCapped(body: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!body) return ''
+  const reader = body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  try {
+    while (size < maxPage) {
+      const { done, value } = await reader.read()
+      if (done) break
+      parts.push(value)
+      size += value.length
+    }
+  } catch {
+    // 중간에 끊긴 응답은 읽은 만큼만 씁니다
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+  return new TextDecoder().decode(Buffer.concat(parts).subarray(0, maxPage))
+}
+
+/** 태그를 지운 화면 글자. 정규식 역추적 없이 한 번만 훑습니다. */
+export function visibleText(html: string): string {
+  const out: string[] = []
+  const lower = html.toLowerCase()
+  let i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt < 0) { out.push(html.slice(i)); break }
+    out.push(html.slice(i, lt))
+    const skip = /^<(script|style)[\s>]/.exec(lower.slice(lt, lt + 8))
+    if (skip) {
+      const end = lower.indexOf(`</${skip[1]}`, lt)
+      if (end < 0) break
+      i = end + 2 + skip[1]!.length
+    }
+    const gt = html.indexOf('>', skip ? i : lt)
+    if (gt < 0) break
+    i = gt + 1
+    out.push(' ')
+  }
+  return out.join('').replace(/\s+/g, ' ')
+}
+
+/** 쿠키 이름만 남깁니다. 이름 없는 쿠키(RFC 6265 §5.2)의 값은 기록하지 않습니다. */
+function cookieName(c: string): string {
+  const first = c.split(';', 1)[0]!
+  const eq = first.indexOf('=')
+  return eq > 0 ? first.slice(0, eq).trim().slice(0, 64) : '(이름 없는 쿠키)'
+}
+const hasAttr = (c: string, attr: string) => c.split(';').slice(1).some((p) => p.trim().split('=')[0]!.trim().toLowerCase() === attr)
+
+/** 웹사이트 첫 화면 점검: HTTPS 전환, HSTS, 쿠키 속성, 처리방침 표시(시행령 제31조②). 첫 페이지만 요청합니다. */
+export async function scanWeb(target: string, get: WebFetch = fetch as unknown as WebFetch): Promise<Finding[]> {
+  const bad = () => new InputError('https://도메인 형식으로 적으세요')
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(target)?.[1]?.toLowerCase()
+  if (scheme && scheme !== 'http' && scheme !== 'https') throw bad()
   let url: URL
-  try { url = new URL(/^https?:\/\//.test(target) ? target : `https://${target}`) } catch { throw new InputError('https://도메인 형식으로 적으세요') }
-  if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new InputError('https://도메인 형식으로 적으세요')
+  try { url = new URL(scheme ? target : `https://${target}`) } catch { throw bad() }
+  if (url.username || url.password || !url.hostname) throw bad()
   const headers = { 'user-agent': 'openprivacy-kr (+https://github.com/j-yoon08/openprivacy-kr)' }
+  const signal = () => AbortSignal.timeout(10_000)
   const list: Draft[] = []
-  const http = await get(`http://${url.host}/`, { redirect: 'manual', headers }).catch(() => undefined)
-  const loc = http?.headers.get('location') ?? ''
+  const http = await get(`http://${url.hostname}/`, { redirect: 'manual', headers, signal: signal() }).catch(() => undefined)
+  http?.body?.cancel().catch(() => {})
+  let to: URL | undefined
+  try { to = new URL(http?.headers.get('location') ?? '', `http://${url.hostname}/`) } catch { to = undefined }
+  const redirected = !!http && [301, 302, 303, 307, 308].includes(http.status) && to?.protocol === 'https:'
   list.push(
     http === undefined
       ? { rule: 'https-redirect', status: 'unknown', title: 'HTTP 접속 확인 불가(80 포트 닫힘 가능)', detail: '', checks: ['cry-transit'] }
-      : http.status >= 300 && http.status < 400 && /^https:\/\//i.test(new URL(loc, `http://${url.host}/`).href)
-        ? { rule: 'https-redirect', status: 'pass', title: 'HTTP 접속을 HTTPS로 전환', detail: `${http.status} → ${loc}`, checks: ['cry-transit'] }
-        : { rule: 'https-redirect', status: 'fail', title: 'HTTP로도 화면을 제공(HTTPS로 전환하지 않음)', detail: `HTTP ${http.status}`, checks: ['cry-transit'] },
+      : redirected
+        ? { rule: 'https-redirect', status: 'pass', title: 'HTTP 접속을 HTTPS로 전환', detail: `${http.status} → ${to!.origin}${to!.pathname}`, checks: ['cry-transit'] }
+        : { rule: 'https-redirect', status: 'fail', title: 'HTTP 접속을 HTTPS로 전환하지 않음', detail: `HTTP ${http.status}`, checks: ['cry-transit'] },
   )
   url.protocol = 'https:'
-  const page = await get(url.href, { redirect: 'follow', headers }).catch((e: Error) => { throw new InputError(`HTTPS로 연결하지 못했습니다: ${e.message}`) })
-  const hsts = /max-age=(\d+)/i.exec(page.headers.get('strict-transport-security') ?? '')
+  const page = await get(url.href, { redirect: 'follow', headers, signal: signal() }).catch((e: Error) => { throw new InputError(`HTTPS로 연결하지 못했습니다: ${e.message}`) })
+  const html = await readCapped(page.body)
+  if (page.url && !page.url.startsWith('https:')) {
+    list.push({ rule: 'https-downgrade', status: 'fail', title: 'HTTPS 접속이 HTTP 주소로 되돌아감', detail: new URL(page.url).origin, checks: ['cry-transit'] })
+  }
+  const hsts = /(?:^|;)\s*max-age\s*=\s*"?(\d+)"?\s*(?:;|$)/i.exec(page.headers.get('strict-transport-security') ?? '')
   const age = hsts ? Number(hsts[1]) : 0
   list.push({ rule: 'hsts', status: age >= 15_552_000 ? 'pass' : 'fail', title: hsts ? `HSTS max-age ${Math.floor(age / 86_400)}일` : 'HSTS 미설정', detail: '180일 이상 권장', checks: ['cry-transit'] })
+  if (page.status < 200 || page.status >= 300) {
+    list.push({ rule: 'page', status: 'unknown', title: `첫 화면 응답 ${page.status}: 쿠키와 처리방침 표시는 확인하지 못함`, detail: '접속 차단(WAF)이나 오류 화면일 수 있습니다.', checks: ['prv-policy'] })
+    return stamp('web', url.host, list)
+  }
   const cookies = page.headers.getSetCookie?.() ?? []
-  const name = (c: string) => c.split('=')[0]!.trim()
-  const noSecure = cookies.filter((c) => !/;\s*secure/i.test(c)).map(name)
-  const noHttpOnly = cookies.filter((c) => !/;\s*httponly/i.test(c)).map(name)
+  const noSecure = cookies.filter((c) => !hasAttr(c, 'secure')).map(cookieName)
+  const noHttpOnly = cookies.filter((c) => !hasAttr(c, 'httponly')).map(cookieName)
   list.push({ rule: 'cookie-secure', status: noSecure.length ? 'fail' : 'pass', title: cookies.length ? (noSecure.length ? `Secure 속성 없는 쿠키 ${noSecure.length}개` : `쿠키 ${cookies.length}개 모두 Secure`) : '첫 화면에서 설정하는 쿠키 없음', detail: noSecure.join(', '), checks: ['cry-transit'] })
   if (noHttpOnly.length) list.push({ rule: 'cookie-httponly', status: 'unknown', title: `HttpOnly 속성 없는 쿠키 ${noHttpOnly.length}개(세션 쿠키면 설정 필요)`, detail: noHttpOnly.join(', '), checks: ['dev-req'] })
-  const html = (await page.text()).slice(0, 2_000_000)
-  const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const text = visibleText(html)
   const hasPolicy = /개인정보\s?처리\s?방침|privacy\s(?:policy|statement|notice)/i.test(text)
+  const thin = text.trim().length < 200
   list.push(
     hasPolicy
       ? { rule: 'privacy-policy-link', status: 'pass', title: '첫 화면에 개인정보 처리방침 표시', detail: '내용이 법정 사항을 모두 담는지는 따로 확인하세요.', checks: ['prv-policy'] }
-      : { rule: 'privacy-policy-link', status: text.trim().length < 200 ? 'unknown' : 'fail', title: text.trim().length < 200 ? '첫 화면에 글이 거의 없어(스크립트로 그리는 화면 등) 처리방침 표시를 확인하지 못함' : '첫 화면에서 개인정보 처리방침을 찾지 못함', detail: '홈페이지에 지속 게재해야 합니다(시행령 제31조②).', checks: ['prv-policy'] },
+      : { rule: 'privacy-policy-link', status: thin ? 'unknown' : 'fail', title: thin ? '첫 화면에 글이 거의 없어(스크립트로 그리는 화면 등) 처리방침 표시를 확인하지 못함' : '첫 화면에서 개인정보 처리방침을 찾지 못함', detail: '홈페이지에 지속 게재해야 합니다(시행령 제31조②).', checks: ['prv-policy'] },
   )
   return stamp('web', url.host, list)
 }

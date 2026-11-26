@@ -19,8 +19,10 @@ const answerSchema = z.strictObject({
   note: z.string().default(''),
   owner: z.string().default(''),
   due: z.union([date, z.literal('')]).default(''),
-  /** 값·메모·담당·기한이 마지막으로 바뀐 시각. 서버가 기록하며 입력값은 무시합니다. */
+  /** 값·메모·담당·기한이 마지막으로 바뀌거나 재확인된 시각(UTC ISO). 서버가 기록하며 입력값은 무시합니다. */
   at: z.string().optional(),
+  /** true로 보내면 바뀐 내용이 없어도 지금 다시 확인한 것으로 기록합니다. 저장하지 않습니다. */
+  reconfirm: z.boolean().optional(),
 })
 const answersSchema = z.record(z.string(), answerSchema)
 const evidenceSchema = z.strictObject({
@@ -146,24 +148,44 @@ export class Workspace {
 
   save(name: CollectionName, value: unknown): void {
     const valid = this.validate(name, value)
-    if (name === 'answers') this.stampAnswers(valid as Record<string, Answer>)
+    // 이력은 답변 파일을 쓴 뒤에 남깁니다. 쓰기가 실패하면 없는 변경이 이력에 남지 않습니다.
+    const log = name === 'answers' ? this.stampAnswers(valid as Record<string, Answer>) : []
     this.write(name, valid)
+    if (log.length) appendFileSync(join(this.dir, 'changes.jsonl'), log.join('\n') + '\n', { mode: 0o600 })
   }
 
-  /** 바뀐 답변에 시각을 찍고 changes.jsonl에 덧붙입니다(심사 때 판단 이력 근거). */
-  private stampAnswers(next: Record<string, Answer>): void {
-    const prev = existsSync(this.path('answers')) ? (this.validate('answers', parse(readFileSync(this.path('answers'), 'utf8')) ?? {}) as Record<string, Answer>) : {}
+  /** 바뀌거나 재확인한 답변에 시각을 찍고, changes.jsonl에 남길 줄을 돌려줍니다(심사 때 판단 이력 근거). */
+  private stampAnswers(next: Record<string, Answer>): string[] {
     const now = new Date().toISOString()
-    const same = (a?: Answer, b?: Answer) => !!a && !!b && a.value === b.value && a.note === b.note && a.owner === b.owner && a.due === b.due
+    const prev = this.previousAnswers()
+    const same = (a: Answer, b: Answer) => a.value === b.value && a.note === b.note && a.owner === b.owner && a.due === b.due
     const log: string[] = []
+    const entry = (check: string, from: Answer | undefined, to: Answer | undefined, kind: string) =>
+      JSON.stringify({ at: now, check, kind, from: from?.value ?? null, to: to?.value ?? null, note: to?.note ?? '', owner: to?.owner ?? '', due: to?.due ?? '' })
     for (const [id, a] of Object.entries(next)) {
       const before = prev[id]
-      if (same(before, a)) { if (before!.at) a.at = before!.at; else delete a.at; continue }
+      const reconfirm = a.reconfirm === true
+      delete a.reconfirm
+      if (before && same(before, a) && !reconfirm) {
+        if (isoTime(before.at)) a.at = before.at
+        else delete a.at
+        continue
+      }
       a.at = now
-      log.push(JSON.stringify({ at: now, check: id, from: before?.value ?? null, to: a.value ?? null, note: a.note, owner: a.owner }))
+      log.push(entry(id, before, a, before && same(before, a) ? '재확인' : before ? '변경' : '새 답변'))
     }
-    for (const id of Object.keys(prev)) if (!(id in next)) log.push(JSON.stringify({ at: now, check: id, from: prev[id]!.value ?? null, to: null, note: '답변 삭제', owner: '' }))
-    if (log.length) appendFileSync(join(this.dir, 'changes.jsonl'), log.join('\n') + '\n', { mode: 0o600 })
+    for (const id of Object.keys(prev)) if (!(id in next)) log.push(entry(id, prev[id], undefined, '삭제'))
+    return log
+  }
+
+  /** 저장된 답변을 너그럽게 읽습니다. 카탈로그에서 빠진 점검이나 깨진 파일 때문에 새 저장이 막히지 않게 합니다. */
+  private previousAnswers(): Record<string, Answer> {
+    try {
+      const parsed = answersSchema.safeParse(parse(readFileSync(this.path('answers'), 'utf8')) ?? {})
+      return parsed.success ? parsed.data : {}
+    } catch {
+      return {}
+    }
   }
 
   private path(name: CollectionName): string {
@@ -265,6 +287,16 @@ export function addDays(day: string, n: number): string {
   const d = new Date(`${day}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
+}
+
+/** 서버가 찍은 시각(UTC ISO 8601)인지 확인합니다. */
+export function isoTime(s: string | undefined): s is string {
+  return !!s && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(s) && !Number.isNaN(Date.parse(s))
+}
+
+/** 한국 시간 기준 날짜(YYYY-MM-DD) */
+export function seoulDay(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(d)
 }
 
 export function today(): string {

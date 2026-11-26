@@ -122,8 +122,8 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ['권익침해 구제 방법', '- 개인정보침해 신고센터: 국번 없이 118 (privacy.kisa.or.kr)\n- 개인정보 분쟁조정위원회: 1833-6972 (kopico.go.kr)'],
     )
     if (cond('foreignOnly')) {
-      // 법 제31조의2④, 시행령 제31조①4호: 국내에 주소·영업소가 없는 사업자
-      sections.push(['국내대리인', `- 성명(법인은 명칭과 대표자 성명): ${todo('국내대리인 성명')}\n- 주소(법인은 영업소 소재지): ${todo('주소')}\n- 전화번호: ${todo('전화번호')}\n- 전자우편 주소: ${todo('전자우편')}`])
+      // 법 제31조의2④: 국내대리인 지정 의무가 있거나 판단 전이면 기재 / 시행령 제31조①4호: 처리 국가
+      if (a.obligations.find((o) => o.id === 'domestic-agent')?.status !== 'notRequired') sections.push(['국내대리인', `- 성명(법인은 명칭과 대표자 성명): ${todo('국내대리인 성명')}\n- 주소(법인은 영업소 소재지): ${todo('주소')}\n- 전화번호: ${todo('전화번호')}\n- 전자우편 주소: ${todo('전자우편')}`])
       sections.push(['개인정보를 처리하는 국가', `국외에서 국내 정보주체의 개인정보를 직접 수집해 처리하는 국가: ${todo('국가명')}`])
     }
     if (cond('cctv')) sections.push(['고정형 영상정보처리기기 운영·관리', todo('별도 방침이 없으면 목적·장소·대수·보관기간·책임자를 작성')])

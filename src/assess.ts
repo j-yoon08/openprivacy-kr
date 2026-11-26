@@ -1,7 +1,7 @@
 import type { Catalog, Check, FrameworkId, Obligation } from './catalog.ts'
 import { evaluate, missingFacts } from './condition.ts'
 import { loadLaw, sanctionsFor, type Sanction } from './law.ts'
-import { type Finding, type Flow, type Target, type Workspace, type WorkspaceData } from './workspace.ts'
+import { isoTime, seoulDay, type Answer, type Finding, type Flow, type Target, type Workspace, type WorkspaceData } from './workspace.ts'
 
 /**
  * met: 충족 + 유효 증적 / noEvidence: 충족한다고 답했지만 유효한 증적 없음 / conflict: 답과 기술 점검 결과가 어긋남
@@ -78,10 +78,12 @@ function ismsScope(id: string, targets: Target[]): boolean {
   return targets.includes('ismsp') || (targets.includes('isms') && !id.startsWith('3.'))
 }
 
-const yearMs = 365 * 86_400_000
-function answerAge(at: string | undefined, today: string): { answeredAt?: string; stale: boolean } {
-  if (!at || Number.isNaN(Date.parse(at))) return { stale: false }
-  return { answeredAt: at.slice(0, 10), stale: Date.parse(today) - Date.parse(at.slice(0, 10)) > yearMs }
+/** 답한 날(한국 시간)과 1년 경과 여부. 값이 없거나 해당 없는 점검은 재확인 대상이 아닙니다. */
+function answerAge(answer: Answer | undefined, status: Status, today: string): { answeredAt?: string; stale: boolean } {
+  if (!answer || !isoTime(answer.at)) return { stale: false }
+  const answeredAt = seoulDay(new Date(answer.at))
+  const yearLater = `${Number(answeredAt.slice(0, 4)) + 1}${answeredAt.slice(4)}`
+  return { answeredAt, stale: answer.value !== undefined && status !== 'na' && status !== 'needsFact' && today > yearLater }
 }
 
 export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, today: string): Assessment {
@@ -112,7 +114,7 @@ export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, tod
       check, ...r, legal, frameworks, priority, priorityName,
       sanctions: legal ? sanctionsFor(book, check.map.pipa) : [],
       evidenceIds: validEvidence.get(check.id) ?? [], findings: failing,
-      ...answerAge(data.answers[check.id]?.at, today),
+      ...answerAge(data.answers[check.id], r.status, today),
     })
   }
   checks.sort((a, b) => b.priority - a.priority)
@@ -248,8 +250,9 @@ function flowIssues(f: Flow, data: WorkspaceData): FlowIssue[] {
   return out
 }
 
+/** 가장 나쁜 상태. 빈 목록은 미응답으로 봅니다. */
 export function worst(s: Status[]): Status {
-  return order.find((o) => s.includes(o))!
+  return order.find((o) => s.includes(o)) ?? 'unanswered'
 }
 function tally(s: Status[]): Record<Status, number> {
   const out = Object.fromEntries(order.map((o) => [o, 0])) as Record<Status, number>
