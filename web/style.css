@@ -301,7 +301,7 @@ main {
   scroll-margin-top: 56px;
 }
 
-h2[id], .check, details.law, details.gap-row, details.topic-group, details.crit-item, details.flow-card {
+h2[id], label.field, .check, details.law, details.gap-row, details.topic-group, details.crit-item, details.flow-card {
   scroll-margin-top: 58px;
 }
 
@@ -495,6 +495,12 @@ select[multiple] option { padding: 4px 6px; border-radius: 3px; }
 .num-input { width: 112px; }
 
 label.field { display: block; font-size: 13.5px; min-width: 0; }
+label.field.is-focused {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
 label.field > span:first-child {
   display: block;
   font-weight: 500;
@@ -591,6 +597,155 @@ th {
 .f-partial { fill: var(--warn); }
 .f-gap, .f-conflict { fill: var(--bad); }
 .f-unanswered, .f-needsFact { fill: var(--line-strong); }
+
+/* Home Start Guide Panel */
+.start-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.start-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+}
+.start-head-main {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.start-head-main h2 {
+  margin: 0 0 2px;
+}
+.start-body {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.start-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 18px 22px;
+  align-items: start;
+}
+.start-col-side,
+.start-col-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.start-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+.start-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+.start-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.start-item:last-child {
+  border-bottom: 0;
+}
+.start-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.start-item-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.start-item-meta {
+  line-height: 1.4;
+}
+.start-action-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.domain-progress-list {
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.domain-progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.domain-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.domain-progress-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 0;
+}
+progress.domain-progress {
+  width: 100%;
+  height: 7px;
+  appearance: none;
+  border: 0;
+  border-radius: 3px;
+  background: var(--soft);
+  overflow: hidden;
+  display: block;
+}
+progress.domain-progress::-webkit-progress-bar {
+  background: var(--soft);
+  border-radius: 3px;
+}
+progress.domain-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 3px;
+}
+progress.domain-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 3px;
+}
+progress.domain-progress.is-complete::-webkit-progress-value {
+  background: var(--ok);
+}
+progress.domain-progress.is-complete::-moz-progress-bar {
+  background: var(--ok);
+}
 
 /* Home Summary */
 .summary {
@@ -1554,7 +1709,8 @@ label.field.is-missing select {
 
 /* Breakpoints */
 @media (max-width: 1079px) {
-  .review-grid {
+  .review-grid,
+  .start-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1640,6 +1796,7 @@ label.field.is-missing select {
   .crit-point-head { flex-direction: column; gap: 4px; }
   .ismsp-area-bar { width: 100%; }
   .entry-card, .legacy-box { padding: 10px; }
+  .start-item { padding: 10px; }
   #saved { max-width: 120px; }
   main { padding: 14px 12px 60px; }
 }
