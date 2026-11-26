@@ -10,7 +10,43 @@ const statusNames = {
   met: '충족',
   na: '해당 없음',
 }
+const statusOrder = ['gap', 'conflict', 'partial', 'noEvidence', 'needsFact', 'unanswered', 'met', 'na']
 const barOrder = ['met', 'noEvidence', 'partial', 'conflict', 'gap', 'needsFact', 'unanswered']
+const ismspSubgroups = {
+  '1.1': '관리체계 기반 마련',
+  '1.2': '위험 관리',
+  '1.3': '관리체계 운영',
+  '1.4': '관리체계 점검 및 개선',
+  '2.1': '정책, 조직, 자산 관리',
+  '2.2': '인적 보안',
+  '2.3': '외부자 보안',
+  '2.4': '물리 보안',
+  '2.5': '인증 및 권한관리',
+  '2.6': '접근통제',
+  '2.7': '암호화 적용',
+  '2.8': '정보시스템 도입 및 개발 보안',
+  '2.9': '시스템 및 서비스 운영관리',
+  '2.10': '시스템 및 서비스 보안관리',
+  '2.11': '사고 예방 및 대응',
+  '2.12': '재해 복구',
+  '3.1': '개인정보 수집 시 보호조치',
+  '3.2': '개인정보 보유 및 이용 시 보호조치',
+  '3.3': '개인정보 제공 시 보호조치',
+  '3.4': '개인정보 파기 시 보호조치',
+  '3.5': '정보주체 권리보호',
+}
+const worstStatus = (list) => statusOrder.find((s) => list.includes(s)) ?? 'unanswered'
+function tallyStatuses(list) {
+  const out = Object.fromEntries(statusOrder.map((k) => [k, 0]))
+  for (const item of list) out[item.status] = (out[item.status] ?? 0) + 1
+  return out
+}
+function pointStatus(pt, byCheck) {
+  const linked = pt.checks.map((id) => byCheck.get(id)).filter(Boolean)
+  const active = linked.filter((c) => c.status !== 'na')
+  if (active.length) return worstStatus(active.map((c) => c.status))
+  return linked.length ? 'na' : 'unanswered'
+}
 const targets = {
   pipa: '개인정보 보호법',
   isms: 'ISMS(80개)',
@@ -40,7 +76,7 @@ const evidenceStateNames = {
 
 const navGroups = [
   { id: 'overview', label: '', items: ['home'] },
-  { id: 'diag', label: '진단', items: ['facts', 'checks', 'gaps'] },
+  { id: 'diag', label: '진단', items: ['facts', 'checks', 'gaps', 'ismsp'] },
   { id: 'review', label: '검토', items: ['review', 'law'] },
   { id: 'manage', label: '관리', items: ['flows', 'risks', 'evidence'] },
   { id: 'ref', label: '문서·기준', items: ['docs', 'sources'] },
@@ -51,6 +87,7 @@ const viewMeta = {
   facts: { label: '상황 입력', group: '진단', render: factsView },
   checks: { label: '점검', group: '진단', render: checksView },
   gaps: { label: '부족한 점·개선', group: '진단', render: gapsView },
+  ismsp: { label: '인증기준', group: '진단', render: ismspView },
   review: { label: '상황 검토', group: '검토', render: reviewView },
   law: { label: '법령 전문', group: '검토', render: lawView },
   flows: { label: '처리 흐름', group: '관리', render: flowsView },
@@ -83,7 +120,8 @@ let lawPromise = null
 let current = startupView
 
 const gapFilter = { status: '', domain: '', legal: '', fw: '', q: '' }
-const checkFilter = { mode: 'all', q: '' }
+const checkFilter = { mode: 'all', domain: '', q: '' }
+const ismspFilter = { status: '', area: '', q: '' }
 const lawFilter = { q: '', source: '', role: '', upcomingOnly: false, annexOnly: false }
 const pre = { check: '', risk: null, focusCheck: '' }
 
@@ -394,8 +432,9 @@ function initNav() {
               h('span', { class: 'nav-label' }, viewMeta[id].label),
               countEl,
             )
-            navRefs.set(id, { btn, countEl })
-            return h('li', {}, btn)
+            const li = h('li', {}, btn)
+            navRefs.set(id, { li, btn, countEl })
+            return li
           }),
         ),
       ),
@@ -413,8 +452,10 @@ function updateChrome() {
   crumbTextEl.textContent = meta.group ? `${meta.group} / ${meta.label}` : meta.label
   document.title = `${meta.label} — openprivacy-kr`
 
+  const hasIsms = state.data.profile.targets.includes('isms') || state.data.profile.targets.includes('ismsp')
   const badges = navBadges()
-  for (const [id, { btn, countEl }] of navRefs) {
+  for (const [id, { li, btn, countEl }] of navRefs) {
+    if (id === 'ismsp') li.hidden = !hasIsms
     if (id === current) btn.setAttribute('aria-current', 'page')
     else btn.removeAttribute('aria-current')
     const b = badges[id]
@@ -523,6 +564,9 @@ function lawName(p) {
 }
 
 function jumpToCheck(checkId) {
+  checkFilter.mode = 'all'
+  checkFilter.domain = ''
+  checkFilter.q = ''
   pre.focusCheck = checkId
   go('checks')
 }
@@ -671,7 +715,9 @@ function gapRow(c, defaultOpen = false) {
           tag(`p-${c.priorityName}`, c.priorityName),
           tag(`s-${c.status}`, statusNames[c.status]),
           c.legal ? tag('s-required', '법적 의무') : null,
+          c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
           h('span', { class: 'small muted' }, c.check.domain),
+          c.answeredAt ? h('span', { class: 'small muted check-date' }, `· 판단일 ${c.answeredAt}`) : null,
           c.sanctions.length ? h('span', { class: 'small muted' }, `· 제재 ${c.sanctions.length}건`) : null,
           c.findings.length ? tag('s-conflict', `기술 점검 실패 ${c.findings.length}건`) : null,
           ans?.owner || ans?.due
@@ -691,6 +737,17 @@ function gapRow(c, defaultOpen = false) {
         { class: 'gap-dl' },
         h('dt', {}, '현재'),
         h('dd', {}, c.current),
+        c.answeredAt
+          ? [
+              h('dt', {}, '판단일'),
+              h(
+                'dd',
+                { class: 'row' },
+                h('span', { class: 'check-date' }, c.answeredAt),
+                c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
+              ),
+            ]
+          : null,
         h('dt', {}, '부족한 점'),
         h('dd', {}, c.reason),
         h('dt', {}, '개선 방법'),
@@ -786,6 +843,7 @@ function homeView() {
     const s = state.evidenceStates[e.id]?.state
     return s === 'expired' || s === 'missing' || s === 'modified'
   })
+  const staleList = a.checks.filter((c) => c.stale)
 
   return [
     h(
@@ -820,6 +878,31 @@ function homeView() {
               },
             },
             '불일치 항목 보기',
+          ),
+        )
+      : null,
+    staleList.length > 0
+      ? h(
+          'div',
+          { class: 'notice is-warn row between', 'data-stale-banner': '1' },
+          h(
+            'span',
+            {},
+            `1년 넘게 재확인하지 않은 답변 ${staleList.length}건이 있습니다. 인증 사후·갱신심사는 매년 있으므로 현재 상태를 다시 확인하세요.`,
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'compact',
+              onclick: () => {
+                checkFilter.mode = 'stale'
+                checkFilter.domain = ''
+                checkFilter.q = ''
+                go('checks')
+              },
+            },
+            `재확인 필요 ${staleList.length}건 보기`,
           ),
         )
       : null,
@@ -1031,30 +1114,67 @@ function checksView() {
   const focusId = pre.focusCheck
   pre.focusCheck = ''
 
-  const allScoped = state.assessment.checks.filter((c) => c.status !== 'na' || state.data.answers[c.check.id]?.value === 'na')
+  const scopedOf = (a) =>
+    a.checks.filter((c) => c.status !== 'na' || state.data.answers[c.check.id]?.value === 'na' || c.stale || c.check.id === focusId)
+  const allScoped = scopedOf(state.assessment)
   const domains = [...new Set(allScoped.map((c) => c.check.domain))].sort()
+  if (checkFilter.domain && !domains.includes(checkFilter.domain)) checkFilter.domain = ''
 
   const listWrap = h('div', {})
   const domainMetaEls = new Map()
-  const rowStatusEls = new Map()
-  const domainDetails = []
+  const rowRefs = new Map()
+  const domainPanels = []
+  const modeBtnRefs = new Map()
 
-  const refreshRowStatuses = () => {
-    const byId = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
-    for (const [cid, el] of rowStatusEls) {
-      const fresh = byId.get(cid)
-      if (fresh) {
-        el.className = `tag s-${fresh.status}`
-        el.textContent = statusNames[fresh.status]
-      }
-    }
-    for (const [domain, { countEl, ids }] of domainMetaEls) {
-      const done = ids.filter((id) => state.data.answers[id]?.value !== undefined).length
-      countEl.textContent = `${done}/${ids.length} 응답`
+  const computeModeCounts = () => {
+    const cur = scopedOf(state.assessment)
+    return {
+      all: cur.length,
+      unanswered: cur.filter((c) => state.data.answers[c.check.id]?.value === undefined).length,
+      open: cur.filter(isOpen).length,
+      stale: cur.filter((c) => c.stale).length,
     }
   }
 
+  const updateModeBar = () => {
+    const counts = computeModeCounts()
+    const labels = {
+      all: `전체 (${counts.all})`,
+      unanswered: `미응답만 (${counts.unanswered})`,
+      open: `부족·개선 필요 (${counts.open})`,
+      stale: `재확인 필요 (${counts.stale})`,
+    }
+    for (const [id, btn] of modeBtnRefs) {
+      btn.textContent = labels[id]
+      btn.setAttribute('aria-pressed', checkFilter.mode === id ? 'true' : 'false')
+      if (id === 'stale') btn.hidden = counts.stale === 0 && checkFilter.mode !== 'stale'
+    }
+  }
+
+  const refreshRowStatuses = () => {
+    const byId = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+    for (const [cid, ref] of rowRefs) {
+      const fresh = byId.get(cid)
+      if (!fresh) continue
+      ref.statusTag.className = `tag s-${fresh.status}`
+      ref.statusTag.textContent = statusNames[fresh.status]
+      ref.dateEl.hidden = !fresh.answeredAt
+      ref.dateEl.textContent = fresh.answeredAt ? `판단일 ${fresh.answeredAt}` : ''
+      ref.staleEl.hidden = !fresh.stale
+    }
+    for (const [, meta] of domainMetaEls) {
+      const done = meta.ids.filter((id) => state.data.answers[id]?.value !== undefined).length
+      meta.countEl.textContent = `${done}/${meta.ids.length} 응답`
+      const staleN = meta.ids.filter((id) => byId.get(id)?.stale).length
+      meta.staleBadgeEl.hidden = staleN === 0
+      meta.staleBadgeEl.textContent = staleN ? `재확인 ${staleN}` : ''
+    }
+    updateModeBar()
+  }
+
   function answerRow(c) {
+    const freshCheck = () => state.assessment.checks.find((x) => x.check.id === c.check.id) ?? c
+    const cur = freshCheck()
     const ans = () => state.data.answers[c.check.id] ?? { note: '', owner: '', due: '' }
     const put = (patch) => {
       const next = { ...ans(), ...patch }
@@ -1068,8 +1188,10 @@ function checksView() {
       ['no', '아니오'],
       ['na', '제외'],
     ]
-    const statusTag = tag(`s-${c.status}`, statusNames[c.status])
-    rowStatusEls.set(c.check.id, statusTag)
+    const statusTag = tag(`s-${cur.status}`, statusNames[cur.status])
+    const dateEl = h('span', { class: 'check-date', hidden: !cur.answeredAt }, cur.answeredAt ? `판단일 ${cur.answeredAt}` : '')
+    const staleEl = h('span', { class: 'tag s-stale', hidden: !cur.stale }, '1년 넘음 · 재확인 필요')
+    rowRefs.set(c.check.id, { statusTag, dateEl, staleEl })
 
     const control =
       c.check.type === 'number'
@@ -1116,16 +1238,18 @@ function checksView() {
           'div',
           { class: 'row small muted' },
           statusTag,
-          c.legal ? tag('s-required', '법적 의무') : null,
+          cur.legal ? tag('s-required', '법적 의무') : null,
+          staleEl,
+          dateEl,
           h('span', { class: 'mono' }, c.check.id),
-          refs(c) ? h('span', {}, refs(c)) : null,
-          c.status === 'needsFact' ? h('span', {}, c.reason) : null,
+          refs(cur) ? h('span', {}, refs(cur)) : null,
+          cur.status === 'needsFact' || (focusId === c.check.id && cur.status === 'na') ? h('span', {}, cur.reason) : null,
         ),
-        c.findings.length
+        cur.findings.length
           ? h(
               'div',
               { class: 'finding-line' },
-              c.findings.map((f) => `${f.title} (${f.scanner} · ${f.target}) ${f.detail}`).join(' / '),
+              cur.findings.map((f) => `${f.title} (${f.scanner} · ${f.target}) ${f.detail}`).join(' / '),
             )
           : null,
       ),
@@ -1148,43 +1272,130 @@ function checksView() {
     )
   }
 
+  const resetBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact ghost',
+      hidden: true,
+      onclick: () => {
+        Object.assign(checkFilter, { mode: 'all', domain: '', q: '' })
+        searchInput.value = ''
+        domainSelect.value = ''
+        updateModeBar()
+        renderDomains()
+      },
+    },
+    '필터 초기화',
+  )
+  const domainSelect = select(
+    checkFilter.domain,
+    {
+      '': `모든 영역 (${allScoped.length})`,
+      ...Object.fromEntries(domains.map((d) => [d, `${d} (${allScoped.filter((c) => c.check.domain === d).length})`])),
+    },
+    (v) => {
+      checkFilter.domain = v
+      renderDomains()
+    },
+    '영역',
+  )
+  const searchInput = h('input', {
+    type: 'search',
+    'aria-label': '점검 항목 검색',
+    placeholder: '항목 ID, 요구사항, 조문·기준 번호로 찾기',
+    value: checkFilter.q,
+    oninput: (e) => {
+      checkFilter.q = e.target.value
+      renderDomains()
+    },
+  })
+  const shownCountEl = h('span', { class: 'small muted num' }, '')
+
   const renderDomains = () => {
     domainMetaEls.clear()
-    rowStatusEls.clear()
-    domainDetails.length = 0
+    rowRefs.clear()
+    domainPanels.length = 0
+    const curScoped = scopedOf(state.assessment)
     const q = checkFilter.q.trim().toLowerCase()
     const matches = (c) => {
+      if (checkFilter.domain && c.check.domain !== checkFilter.domain) return false
       if (checkFilter.mode === 'unanswered' && state.data.answers[c.check.id]?.value !== undefined) return false
       if (checkFilter.mode === 'open' && !isOpen(c)) return false
-      if (q && !`${c.check.id} ${c.check.need} ${c.check.domain} ${refs(c)}`.toLowerCase().includes(q)) return false
+      if (checkFilter.mode === 'stale' && !c.stale) return false
+      if (q) {
+        const note = state.data.answers[c.check.id]?.note ?? ''
+        if (!`${c.check.id} ${c.check.need} ${c.check.domain} ${refs(c)} ${c.reason} ${note}`.toLowerCase().includes(q)) return false
+      }
       return true
     }
 
     const blocks = []
+    let shownTotal = 0
     for (const d of domains) {
-      const list = allScoped
+      const list = curScoped
         .filter((c) => c.check.domain === d && matches(c))
         .sort((x, y) => x.check.id.localeCompare(y.check.id))
       if (!list.length) continue
+      shownTotal += list.length
       const done = list.filter((c) => state.data.answers[c.check.id]?.value !== undefined).length
+      const staleN = list.filter((c) => c.stale).length
       const hasFocus = list.some((c) => c.check.id === focusId)
       const countEl = h('span', { class: 'small muted num' }, `${done}/${list.length} 응답`)
-      domainMetaEls.set(d, { countEl, ids: list.map((c) => c.check.id) })
+      const staleBadgeEl = h('span', { class: 'tag s-stale num', hidden: staleN === 0 }, staleN ? `재확인 ${staleN}` : '')
+      domainMetaEls.set(d, { countEl, staleBadgeEl, ids: list.map((c) => c.check.id) })
+      const bodyHost = h('div', {})
+      const defaultOpen = domains.length === 1 || hasFocus || checkFilter.mode !== 'all' || Boolean(checkFilter.domain) || Boolean(q)
       const det = h(
         'details',
-        { class: 'panel', open: domains.length === 1 || hasFocus || checkFilter.mode !== 'all' || Boolean(q) },
-        h('summary', { class: 'disclosure-head' }, h('span', { class: 'row' }, h('strong', {}, d), countEl)),
-        list.map(answerRow),
+        { class: 'panel', open: defaultOpen },
+        h('summary', { class: 'disclosure-head' }, h('span', { class: 'row' }, h('strong', {}, d), countEl, staleBadgeEl)),
+        bodyHost,
       )
-      domainDetails.push(det)
+      const populate = () => {
+        if (bodyHost.dataset.ready) return
+        bodyHost.dataset.ready = '1'
+        bodyHost.replaceChildren(...list.map(answerRow))
+      }
+      if (defaultOpen) populate()
+      det.addEventListener('toggle', () => {
+        if (det.open) populate()
+      })
+      domainPanels.push({ det, populate })
       blocks.push(det)
     }
 
+    shownCountEl.textContent = `${shownTotal}/${curScoped.length}항목`
+    resetBtn.hidden = !(checkFilter.mode !== 'all' || checkFilter.domain || q)
     listWrap.replaceChildren(
       ...(blocks.length ? blocks : [h('p', { class: 'notice' }, '조건에 맞는 점검 항목이 없습니다.')]),
     )
   }
 
+  const modeBar = h(
+    'div',
+    { class: 'chip-row', role: 'group', 'aria-label': '점검 필터' },
+    ['all', 'unanswered', 'open', 'stale'].map((id) => {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          class: 'chip-btn',
+          'data-check-mode': id,
+          'aria-pressed': checkFilter.mode === id ? 'true' : 'false',
+          onclick: () => {
+            checkFilter.mode = id
+            updateModeBar()
+            renderDomains()
+          },
+        },
+        '',
+      )
+      modeBtnRefs.set(id, btn)
+      return btn
+    }),
+  )
+  updateModeBar()
   renderDomains()
 
   if (focusId) {
@@ -1192,40 +1403,11 @@ function checksView() {
       const row = main.querySelector(`.check[data-check-id="${CSS.escape(focusId)}"]`)
       if (row) {
         scrollIntoViewSafe(row)
-        const ctrl = row.querySelector('input, button')
+        const ctrl = row.querySelector('input:checked, input, button')
         if (ctrl) ctrl.focus()
       }
     })
   }
-
-  const modeButtons = [
-    ['all', `전체 (${allScoped.length})`],
-    ['unanswered', `미응답 (${allScoped.filter((c) => state.data.answers[c.check.id]?.value === undefined).length})`],
-    ['open', `부족·개선 필요 (${allScoped.filter(isOpen).length})`],
-  ]
-
-  const modeBar = h('div', { class: 'chip-row', role: 'group', 'aria-label': '점검 필터' })
-  const drawModeBar = () => {
-    modeBar.replaceChildren(
-      ...modeButtons.map(([id, text]) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'chip-btn',
-            'aria-pressed': checkFilter.mode === id ? 'true' : 'false',
-            onclick: () => {
-              checkFilter.mode = id
-              drawModeBar()
-              renderDomains()
-            },
-          },
-          text,
-        ),
-      ),
-    )
-  }
-  drawModeBar()
 
   return [
     h(
@@ -1249,28 +1431,29 @@ function checksView() {
         h(
           'div',
           { class: 'row' },
+          shownCountEl,
+          resetBtn,
           h(
             'button',
-            { type: 'button', class: 'compact', onclick: () => domainDetails.forEach((d) => (d.open = true)) },
+            {
+              type: 'button',
+              class: 'compact',
+              onclick: () =>
+                domainPanels.forEach(({ det, populate }) => {
+                  populate()
+                  det.open = true
+                }),
+            },
             '모두 펼치기',
           ),
           h(
             'button',
-            { type: 'button', class: 'compact', onclick: () => domainDetails.forEach((d) => (d.open = false)) },
+            { type: 'button', class: 'compact', onclick: () => domainPanels.forEach(({ det }) => (det.open = false)) },
             '모두 접기',
           ),
         ),
       ),
-      h('input', {
-        type: 'search',
-        'aria-label': '점검 항목 검색',
-        placeholder: '항목 ID, 요구사항, 조문 번호로 찾기',
-        value: checkFilter.q,
-        oninput: (e) => {
-          checkFilter.q = e.target.value
-          renderDomains()
-        },
-      }),
+      h('div', { class: 'filters' }, searchInput, domainSelect),
     ),
     listWrap,
     h('div', { class: 'row' }, h('button', { type: 'button', class: 'primary', onclick: () => queue.then(() => go('gaps')) }, '부족한 점 보기')),
@@ -1288,6 +1471,7 @@ function gapsView() {
     if (!st) return isOpen(c)
     if (st === 'critical') return c.status === 'gap' || c.status === 'conflict'
     if (st === 'undecided') return c.status === 'unanswered' || c.status === 'needsFact'
+    if (st === 'stale') return c.stale
     return c.status === st
   }
 
@@ -1412,6 +1596,7 @@ function gapsView() {
           '': '부족한 것 전체',
           critical: '부족·불일치',
           undecided: '미판단 (미응답·상황 확인)',
+          stale: '1년 넘음 · 재확인 필요',
           ...statusNames,
         },
         set('status'),
@@ -1444,10 +1629,443 @@ function gapsView() {
             h('span', { class: 'small muted num' }, `${f.applicable}/${f.total} 적용 · 충족 ${f.counts.met}`),
           ),
         ),
+        f.id === 'ismsp'
+          ? h(
+              'div',
+              { class: 'row panel-action-row' },
+              h(
+                'button',
+                { type: 'button', class: 'compact', onclick: () => go('ismsp') },
+                '인증기준에서 고시 원문·요건별 상태 보기',
+              ),
+            )
+          : null,
         table(
           ['조항', '이름', '상태', '연결 점검'],
           f.requirements.map((r) => [r.id, r.title, tag(`s-${r.status}`, statusNames[r.status]), r.checks.join(', ')]),
         ),
+      ),
+    ),
+  ]
+}
+
+// =========================================================================
+// 4-2. ISMS-P 인증기준 (ismsp) — 영역·항목군별 101개 기준, 고시 원문·요건별 상태
+// =========================================================================
+function ismspView() {
+  const fw = state.assessment.frameworks.find((f) => f.id === 'ismsp')
+  if (!fw) {
+    return [
+      h(
+        'div',
+        { class: 'page-head' },
+        h(
+          'div',
+          { class: 'page-head-main' },
+          h('h1', {}, '인증기준'),
+          h('p', { class: 'muted' }, 'ISMS 또는 ISMS-P 인증기준 항목과 요건별 이행 현황을 확인합니다.'),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'notice row between' },
+        h('span', {}, '현재 준비할 기준에 ISMS 또는 ISMS-P가 선택되어 있지 않습니다. 상황 입력에서 선택하면 인증기준을 볼 수 있습니다.'),
+        h('button', { type: 'button', class: 'primary compact', onclick: () => go('facts') }, '상황 입력으로 이동'),
+      ),
+    ]
+  }
+
+  const byCheck = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+  const areaKey = (r) => `${r.id.split('.')[0]}. ${r.group}`
+  const subKey = (r) => r.id.split('.').slice(0, 2).join('.')
+  const subgroupLabel = (code) => (ismspSubgroups[code] ? `${code} ${ismspSubgroups[code]}` : code)
+  const areas = [...new Set(fw.requirements.map(areaKey))]
+  if (ismspFilter.area && !areas.includes(ismspFilter.area)) ismspFilter.area = ''
+
+  const matchesStatus = (r, st) => {
+    if (!st) return true
+    if (st === 'open') return isOpen(r)
+    if (st === 'critical') return r.status === 'gap' || r.status === 'conflict'
+    if (st === 'undecided') return r.status === 'unanswered' || r.status === 'needsFact'
+    return r.status === st
+  }
+
+  const kpiCounts = {
+    critical: fw.counts.gap + fw.counts.conflict,
+    partial: fw.counts.partial,
+    noEvidence: fw.counts.noEvidence,
+    undecided: fw.counts.unanswered + fw.counts.needsFact,
+    met: fw.counts.met,
+  }
+  const kpiCells = [
+    ['critical', '부족·불일치', kpiCounts.critical, kpiCounts.critical ? 'is-bad' : ''],
+    ['partial', '부분 충족', kpiCounts.partial, kpiCounts.partial ? 'is-warn' : ''],
+    ['noEvidence', '증적 부족', kpiCounts.noEvidence, kpiCounts.noEvidence ? 'is-info' : ''],
+    ['undecided', '미판단', kpiCounts.undecided, ''],
+    ['met', '충족', kpiCounts.met, kpiCounts.met ? 'is-ok' : ''],
+  ]
+
+  const kpiRefs = new Map()
+  const areaRefs = new Map()
+  const critPanels = []
+  const listHost = h('div', {})
+  const countEl = h('span', { class: 'small muted num' }, '')
+
+  const searchInput = h('input', {
+    type: 'search',
+    'aria-label': '인증기준 검색',
+    placeholder: '항목 번호, 제목, 고시 원문, 요건, 점검 ID로 찾기',
+    value: ismspFilter.q,
+    oninput: (e) => {
+      ismspFilter.q = e.target.value
+      renderList()
+    },
+  })
+  const statusSelect = select(
+    ismspFilter.status,
+    {
+      '': '모든 상태',
+      open: '부족·개선 필요',
+      critical: '부족·불일치',
+      undecided: '미판단 (미응답·상황 확인)',
+      ...statusNames,
+    },
+    (v) => {
+      ismspFilter.status = v
+      renderList()
+    },
+    '인증기준 상태',
+  )
+  const resetBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact ghost',
+      hidden: true,
+      onclick: () => {
+        Object.assign(ismspFilter, { status: '', area: '', q: '' })
+        searchInput.value = ''
+        statusSelect.value = ''
+        renderList()
+      },
+    },
+    '필터 초기화',
+  )
+  const expandAllBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact',
+      onclick: () =>
+        critPanels.forEach(({ det, populate }) => {
+          populate()
+          det.open = true
+        }),
+    },
+    '모두 펼치기',
+  )
+  const collapseAllBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact',
+      onclick: () => critPanels.forEach(({ det }) => (det.open = false)),
+    },
+    '모두 접기',
+  )
+
+  const kpiStrip = h(
+    'div',
+    { class: 'kpi-strip', role: 'group', 'aria-label': '인증기준 상태별 요약 필터' },
+    kpiCells.map(([key, label, n, cls]) => {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          class: 'kpi-cell',
+          'aria-pressed': ismspFilter.status === key ? 'true' : 'false',
+          onclick: () => {
+            ismspFilter.status = ismspFilter.status === key ? '' : key
+            statusSelect.value = ismspFilter.status
+            renderList()
+          },
+        },
+        h('span', { class: 'kpi-label' }, label),
+        h('span', { class: `kpi-val ${cls}` }, n),
+      )
+      kpiRefs.set(key, btn)
+      return btn
+    }),
+  )
+
+  const areaBar = h(
+    'div',
+    { class: 'chip-row', role: 'group', 'aria-label': '영역 필터' },
+    [
+      ['', `전체 (${fw.requirements.length})`],
+      ...areas.map((aName) => [aName, `${aName} (${fw.requirements.filter((r) => areaKey(r) === aName).length})`]),
+    ].map(([val, label]) => {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          class: 'chip-btn',
+          'aria-pressed': ismspFilter.area === val ? 'true' : 'false',
+          onclick: () => {
+            ismspFilter.area = val
+            renderList()
+          },
+        },
+        label,
+      )
+      areaRefs.set(val, btn)
+      return btn
+    }),
+  )
+
+  function criterionEl(r, query) {
+    const pts = Array.isArray(r.points) ? r.points : []
+    const snippet = query
+      ? excerptAround(r.text || '', query) ||
+        pts.map((pt) => excerptAround(pt.text, query)).find(Boolean) ||
+        null
+      : null
+
+    const bodyHost = h('div', {})
+    const det = h(
+      'details',
+      { class: 'crit-item', 'data-req-id': r.id },
+      h(
+        'summary',
+        { class: 'crit-sum' },
+        h(
+          'div',
+          { class: 'crit-sum-main' },
+          h(
+            'div',
+            { class: 'crit-sum-top' },
+            h('span', { class: 'crit-id mono' }, highlightText(r.id, query)),
+            h('span', { class: 'crit-title' }, highlightText(r.title, query)),
+            tag(`s-${r.status}`, statusNames[r.status]),
+          ),
+          h(
+            'div',
+            { class: 'small muted num' },
+            pts.length ? `요건 ${pts.length}개 · 연결 점검 ${r.checks.length}개` : `연결 점검 ${r.checks.length}개`,
+          ),
+          snippet ? h('div', { class: 'law-snippet' }, snippet) : null,
+        ),
+        h('span', { class: 'crit-chevron', 'aria-hidden': 'true' }),
+      ),
+      bodyHost,
+    )
+
+    const renderLinkedCheck = (cid) => {
+      const cr = byCheck.get(cid)
+      if (!cr) {
+        return h(
+          'div',
+          { class: 'linked-check-row' },
+          h('span', { class: 'muted small' }, `${cid} (현재 선택한 기준 외)`),
+        )
+      }
+      return h(
+        'div',
+        { class: 'linked-check-row', 'data-linked-check': cid },
+        h(
+          'div',
+          { class: 'linked-check-main' },
+          h(
+            'div',
+            { class: 'row' },
+            tag(`s-${cr.status}`, statusNames[cr.status]),
+            h('span', { class: 'mono small muted' }, cid),
+            cr.answeredAt ? h('span', { class: 'small muted check-date' }, `판단일 ${cr.answeredAt}`) : null,
+            cr.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
+          ),
+          h('div', {}, cr.required),
+        ),
+        h(
+          'button',
+          { type: 'button', class: 'compact', 'data-jump-check': cid, onclick: () => jumpToCheck(cid) },
+          '점검 보기',
+        ),
+      )
+    }
+
+    const populate = () => {
+      if (bodyHost.dataset.ready) return
+      bodyHost.dataset.ready = '1'
+      bodyHost.replaceChildren(
+        h(
+          'div',
+          { class: 'crit-body' },
+          r.text
+            ? h(
+                'div',
+                {},
+                h('div', { class: 'law-subhead' }, '인증기준 원문 (고시 별표 7)'),
+                h('p', { class: 'crit-official' }, highlightText(r.text, query)),
+              )
+            : null,
+          pts.length
+            ? h(
+                'div',
+                {},
+                h('div', { class: 'law-subhead' }, `확인 요건별 상태 (${pts.length}개)`),
+                h(
+                  'div',
+                  { class: 'crit-points' },
+                  pts.map((pt) => {
+                    const pSt = pointStatus(pt, byCheck)
+                    return h(
+                      'div',
+                      { class: 'crit-point', 'data-point-status': pSt },
+                      h(
+                        'div',
+                        { class: 'crit-point-head' },
+                        tag(`s-${pSt}`, statusNames[pSt]),
+                        h('span', { class: 'crit-point-text' }, highlightText(pt.text, query)),
+                      ),
+                      h('div', { class: 'linked-checks' }, pt.checks.map(renderLinkedCheck)),
+                    )
+                  }),
+                ),
+              )
+            : r.checks.length
+              ? h(
+                  'div',
+                  {},
+                  h('div', { class: 'law-subhead' }, `연결된 점검 (${r.checks.length}개)`),
+                  h('div', { class: 'linked-checks' }, r.checks.map(renderLinkedCheck)),
+                )
+              : null,
+        ),
+      )
+    }
+
+    det.addEventListener('toggle', () => {
+      if (det.open) populate()
+    })
+    critPanels.push({ det, populate })
+    return det
+  }
+
+  const renderList = () => {
+    critPanels.length = 0
+    const q = ismspFilter.q.trim()
+    const qLow = q.toLowerCase()
+
+    for (const [k, btn] of kpiRefs) btn.setAttribute('aria-pressed', ismspFilter.status === k ? 'true' : 'false')
+    for (const [aVal, btn] of areaRefs) btn.setAttribute('aria-pressed', ismspFilter.area === aVal ? 'true' : 'false')
+    statusSelect.value = ismspFilter.status
+
+    const filtered = fw.requirements.filter((r) => {
+      if (ismspFilter.area && areaKey(r) !== ismspFilter.area) return false
+      if (!matchesStatus(r, ismspFilter.status)) return false
+      if (qLow) {
+        const hay = [
+          r.id,
+          r.title,
+          r.group,
+          subgroupLabel(subKey(r)),
+          r.text ?? '',
+          ...(r.points ?? []).flatMap((pt) => [
+            pt.text,
+            ...pt.checks,
+            ...pt.checks.map((cid) => byCheck.get(cid)?.check.need ?? ''),
+          ]),
+        ]
+          .join(' ')
+          .toLowerCase()
+        if (!hay.includes(qLow)) return false
+      }
+      return true
+    })
+
+    countEl.textContent = `${filtered.length}/${fw.requirements.length}항목`
+    const hasFilter = Boolean(ismspFilter.status || ismspFilter.area || q)
+    resetBtn.hidden = !hasFilter
+    expandAllBtn.hidden = filtered.length === 0
+    collapseAllBtn.hidden = filtered.length === 0
+
+    if (!filtered.length) {
+      listHost.replaceChildren(h('p', { class: 'notice' }, '조건에 맞는 인증기준 항목이 없습니다.'))
+      return
+    }
+
+    const byArea = Map.groupBy(filtered, areaKey)
+    listHost.replaceChildren(
+      ...[...byArea].map(([aName, areaReqs]) => {
+        const areaCounts = tallyStatuses(areaReqs)
+        const areaApplicable = areaReqs.length - areaCounts.na
+        const bySub = Map.groupBy(areaReqs, subKey)
+        return h(
+          'section',
+          { class: 'ismsp-area', 'data-area': aName },
+          h(
+            'div',
+            { class: 'ismsp-area-head' },
+            h('h2', {}, aName),
+            h(
+              'div',
+              { class: 'ismsp-area-stats' },
+              h('span', { class: 'small muted num' }, `${areaReqs.length}항목 · 충족 ${areaCounts.met}/${areaApplicable}`),
+              h('div', { class: 'ismsp-area-bar' }, bar(areaCounts)),
+            ),
+          ),
+          ...[...bySub].map(([code, subReqs]) => {
+            const metN = subReqs.filter((r) => r.status === 'met').length
+            return h(
+              'section',
+              { class: 'panel crit-group', 'data-subgroup': code },
+              h(
+                'div',
+                { class: 'crit-group-head' },
+                h('h3', {}, subgroupLabel(code)),
+                h('span', { class: 'small muted num' }, `${subReqs.length}항목 · 충족 ${metN}`),
+              ),
+              ...subReqs.map((r) => criterionEl(r, q)),
+            )
+          }),
+        )
+      }),
+    )
+  }
+
+  renderList()
+
+  return [
+    h(
+      'div',
+      { class: 'page-head' },
+      h(
+        'div',
+        { class: 'page-head-main' },
+        h('h1', {}, fw.title),
+        h(
+          'p',
+          { class: 'muted' },
+          `적용 ${fw.applicable}/${fw.total}항목 · 충족 ${fw.counts.met}항목 · 항목을 펼치면 고시 원문과 요건별 상태·연결 점검이 나타납니다.`,
+        ),
+      ),
+      h('div', { class: 'row' }, expandAllBtn, collapseAllBtn, resetBtn),
+    ),
+    kpiStrip,
+    h(
+      'section',
+      { class: 'panel stack' },
+      h('div', { class: 'filters' }, searchInput, statusSelect),
+      h('div', { class: 'row between' }, areaBar, countEl),
+    ),
+    listHost,
+    h(
+      'div',
+      { class: 'disclaimer-stack' },
+      h(
+        'p',
+        { class: 'muted small' },
+        '상세 원문은 인증 고시 별표 7 원문입니다. 확인 요건은 원문을 바탕으로 이 도구가 나눈 항목이며, KISA 안내서의 세부 확인사항과 다를 수 있습니다.',
       ),
     ),
   ]
