@@ -18,17 +18,25 @@
 
 ## 시작하기
 
-Node.js 22.18 이상과 [pnpm](https://pnpm.io)이 필요합니다.
+Node.js 22.18 이상이 필요합니다. 설치 없이 바로 실행할 수 있습니다.
+
+```sh
+npx -y github:j-yoon08/openprivacy-kr init --dir ~/my-compliance
+npx -y github:j-yoon08/openprivacy-kr serve --dir ~/my-compliance
+```
+
+터미널에 나온 주소를 브라우저에서 엽니다. 자주 쓰면 `npm install -g github:j-yoon08/openprivacy-kr`로 설치한 뒤 `openprivacy-kr serve --dir ~/my-compliance`처럼 씁니다.
+
+소스에서 실행하거나 고치려면:
 
 ```sh
 git clone https://github.com/j-yoon08/openprivacy-kr.git
 cd openprivacy-kr
 pnpm install
-pnpm build
-node dist/src/cli.js serve --dir ~/my-compliance
+node dist/src/cli.js serve --dir examples/sample-shop
 ```
 
-터미널에 나온 주소를 브라우저에서 엽니다. 가상의 쇼핑몰 예시로 먼저 보려면 `--dir examples/sample-shop`을 쓰세요.
+`examples/sample-shop`은 가상의 쇼핑몰 예시입니다.
 
 ## 할 수 있는 일
 
@@ -45,13 +53,13 @@ node dist/src/cli.js serve --dir ~/my-compliance
 | 기술 점검 | 소스(주민등록·카드·휴대전화·운전면허 번호, 클라우드 키·하드코딩 비밀값, 취약 해시), GitHub 설정, TLS, 웹사이트(HTTPS 전환·HSTS·쿠키·처리방침 표시) 점검과 Prowler 결과 가져오기 |
 
 ```sh
-node dist/src/cli.js assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2
-node dist/src/cli.js doc report --dir ~/my-compliance -o report.md
-node dist/src/cli.js review --text "해외 상담 SaaS에 회원 문의를 저장하려 한다" --dir ~/my-compliance -o review.md
-node dist/src/cli.js law 제34조
-node dist/src/cli.js scan repo ./my-service --dir ~/my-compliance
-node dist/src/cli.js import prowler result.ocsf.json --dir ~/my-compliance
-node dist/src/cli.js --help
+openprivacy-kr assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2
+openprivacy-kr doc report --dir ~/my-compliance -o report.md
+openprivacy-kr review --text "해외 상담 SaaS에 회원 문의를 저장하려 한다" --dir ~/my-compliance -o review.md
+openprivacy-kr law 제34조
+openprivacy-kr scan repo ./my-service --dir ~/my-compliance
+openprivacy-kr import prowler result.ocsf.json --dir ~/my-compliance
+openprivacy-kr --help
 ```
 
 TLS 점검은 점검 권한이 있는 대상에만 실행하세요.
