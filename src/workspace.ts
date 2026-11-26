@@ -36,6 +36,27 @@ const evidenceSchema = z.strictObject({
   sha256: z.string().optional(),
   link: z.string().optional(),
 })
+/** 국외 이전 한 건(법 제28조의8①·②). 근거: consent 별도 동의, law 법률·조약, contract 계약 이행 위탁·보관, certified 인증, adequacy 동등성 인정 */
+const transferSchema = z.strictObject({
+  basis: z.enum(['consent', 'law', 'contract', 'certified', 'adequacy', '']).default(''),
+  items: z.string().default(''),
+  country: z.string().default(''),
+  timing: z.string().default(''),
+  method: z.string().default(''),
+  recipient: z.string().default(''),
+  contact: z.string().default(''),
+  purpose: z.string().default(''),
+  retention: z.string().default(''),
+  refusal: z.string().default(''),
+})
+/** 제3자 제공 한 건(법 제17조). 근거: consent 동의, law 제15조①2·3·5~7 목적 범위, related 제17조④ 합리적 관련 범위 */
+const provisionSchema = z.strictObject({
+  basis: z.enum(['consent', 'law', 'related', '']).default(''),
+  recipient: z.string().default(''),
+  purpose: z.string().default(''),
+  items: z.string().default(''),
+  retention: z.string().default(''),
+})
 const flowSchema = z.strictObject({
   id: z.string(),
   name: z.string().min(1),
@@ -50,6 +71,10 @@ const flowSchema = z.strictObject({
   overseas: z.string().default(''),
   systems: z.string().default(''),
   destruction: z.string().default(''),
+  /** 제3자 제공을 건별로 나눠 적은 것. thirdParties(자유 서술)보다 우선합니다. */
+  provisions: z.array(provisionSchema).default([]),
+  /** 국외 이전을 건별로 나눠 적은 것. overseas(자유 서술)보다 우선합니다. */
+  transfers: z.array(transferSchema).default([]),
 })
 const score = z.number().int().min(1).max(5)
 const riskSchema = z.strictObject({
@@ -89,6 +114,8 @@ export type Profile = z.infer<typeof profileSchema>
 export type Answer = z.infer<typeof answerSchema>
 export type Evidence = z.infer<typeof evidenceSchema>
 export type Flow = z.infer<typeof flowSchema>
+export type Transfer = z.infer<typeof transferSchema>
+export type Provision = z.infer<typeof provisionSchema>
 export type Risk = z.infer<typeof riskSchema>
 export type SavedReview = z.infer<typeof reviewSchema>
 export type Finding = z.infer<typeof findingSchema>

@@ -1,7 +1,7 @@
 import type { Catalog, Check, FrameworkId, Obligation } from './catalog.ts'
 import { evaluate, missingFacts } from './condition.ts'
 import { loadLaw, sanctionsFor, type Sanction } from './law.ts'
-import { isoTime, seoulDay, type Answer, type Finding, type Flow, type Target, type Workspace, type WorkspaceData } from './workspace.ts'
+import { isoTime, seoulDay, type Answer, type Finding, type Flow, type Provision, type Target, type Transfer, type Workspace, type WorkspaceData } from './workspace.ts'
 
 /**
  * met: 충족 + 유효 증적 / noEvidence: 충족한다고 답했지만 유효한 증적 없음 / conflict: 답과 기술 점검 결과가 어긋남
@@ -244,9 +244,22 @@ function flowIssues(f: Flow, data: WorkspaceData): FlowIssue[] {
     if (facts.rrn === false) add('조직 상황에는 주민등록번호를 처리하지 않는다고 되어 있습니다', '둘 중 맞는 쪽으로 고치세요.', '입력 모순')
   }
   if (/여권번호|운전면허|외국인등록번호/.test(f.items) && facts.uniqueId === false) add('조직 상황에는 고유식별정보를 처리하지 않는다고 되어 있습니다', '둘 중 맞는 쪽으로 고치세요.', '입력 모순')
-  for (const [field, fact, label] of [['thirdParties', 'thirdParty', '제3자 제공'], ['processors', 'outsourcing', '처리 위탁'], ['overseas', 'overseas', '국외 이전']] as const) {
-    if (f[field] && facts[fact] === false) add(`조직 상황에는 ${label}이(가) 없다고 되어 있습니다`, '둘 중 맞는 쪽으로 고치세요.', '입력 모순')
+  const has = { thirdParty: !!f.thirdParties || f.provisions.length > 0, outsourcing: !!f.processors, overseas: !!f.overseas || f.transfers.length > 0 }
+  for (const [fact, label] of [['thirdParty', '제3자 제공'], ['outsourcing', '처리 위탁'], ['overseas', '국외 이전']] as const) {
+    if (has[fact] && facts[fact] === false) add(`조직 상황에는 ${label}이(가) 없다고 되어 있습니다`, '둘 중 맞는 쪽으로 고치세요.', '입력 모순')
   }
+  if (f.overseas && !f.transfers.length) add('국외 이전을 한 줄로만 적었습니다', '이전받는 자별로 항목, 국가, 시기·방법, 받는 자와 연락처, 목적·보유기간, 거부 방법을 나눠 적으세요. 처리방침과 동의 고지에 그대로 쓰입니다.', '개인정보 보호법 제28조의8②, 제30조①')
+  f.transfers.forEach((x, i) => {
+    const need: [keyof Transfer, string][] = [['basis', '이전 근거'], ['items', '이전 항목'], ['country', '국가'], ['timing', '시기'], ['method', '방법'], ['recipient', '받는 자'], ['contact', '받는 자 연락처'], ['purpose', '이용 목적'], ['retention', '보유·이용 기간'], ['refusal', '거부 방법·절차·효과']]
+    const missing = need.filter(([k]) => !x[k]).map(([, l]) => l)
+    if (missing.length) add(`국외 이전 ${i + 1}(${x.recipient || x.country || '받는 자 미기재'})에 ${missing.join(', ')}이(가) 없습니다`, x.basis === 'consent' ? '별도 동의를 받기 전에 모두 알려야 합니다.' : '처리방침에 공개하거나 정보주체에게 알려야 합니다.', x.basis === 'consent' ? '개인정보 보호법 제28조의8②' : '개인정보 보호법 제28조의8①3, 제30조①, 시행령 제31조①2')
+  })
+  if (f.thirdParties && !f.provisions.length) add('제3자 제공을 한 줄로만 적었습니다', '제공받는 자별로 목적, 항목, 보유·이용 기간, 제공 근거를 나눠 적으세요.', '개인정보 보호법 제17조②, 제30조①3')
+  f.provisions.forEach((x, i) => {
+    const need: [keyof Provision, string][] = [['basis', '제공 근거'], ['recipient', '제공받는 자'], ['purpose', '이용 목적'], ['items', '제공 항목'], ['retention', '보유·이용 기간']]
+    const missing = need.filter(([k]) => !x[k]).map(([, l]) => l)
+    if (missing.length) add(`제3자 제공 ${i + 1}(${x.recipient || '받는 자 미기재'})에 ${missing.join(', ')}이(가) 없습니다`, '동의를 받을 때와 처리방침에 알려야 하는 사항입니다.', '개인정보 보호법 제17조②, 제30조①3')
+  })
   return out
 }
 
