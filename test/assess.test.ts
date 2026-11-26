@@ -189,3 +189,33 @@ test('처리 흐름: 국외 이전·제3자 제공을 한 줄로만 적거나 �
   assert.ok(issues.includes('b: 국외 이전 1(JP Co)에 거부 방법·절차·효과이(가) 없습니다'))
   assert.ok(issues.includes('b: 제3자 제공 1(보험사)에 보유·이용 기간이(가) 없습니다'))
 })
+
+test('ISMS-P 의무는 입법예고안 기준이라 해당해도 확인 필요로 보이고, 해당하지 않으면 비해당, 모르면 필요한 값을 묻는다', () => {
+  const ob = (facts: Record<string, string | number | boolean>) => { const { ws } = setup(facts); return assess(catalog, ws.load(), ws, day).obligations.find((o) => o.id === 'ismsp')! }
+  const telco = ob({ carrier: true, mobileCarrier: true })
+  assert.equal(telco.status, 'verify')
+  assert.match(telco.text, /2028-12-31/)
+  assert.equal(ob({ revenue: 30, carrier: false, identityProvider: false, publicSystem: false }).status, 'notRequired')
+  const big = ob({ revenue: 20000, itRevenue: 500, carrier: false, identityProvider: false, publicSystem: false })
+  assert.equal(big.status, 'verify')
+  assert.match(big.text, /국내 정보주체 수/)
+})
+
+test('이미 답한 값으로 판정할 수 있으면 더 묻지 않는다', () => {
+  const ob = (facts: Record<string, string | number | boolean>, id: string) => { const { ws } = setup(facts); return assess(catalog, ws.load(), ws, day).obligations.find((o) => o.id === id)! }
+  assert.equal(ob({ sensitive: false, uniqueId: false, rrn: false, subjects: 50000 }, 'usage-notice').status, 'notRequired')
+  assert.equal(ob({ revenue: 30, subjects: 5000 }, 'insurance').status, 'notRequired')
+  assert.equal(ob({ sensitive: true, subjects: 50000 }, 'usage-notice').status, 'verify')
+})
+
+test('시작 안내: 판정을 많이 여는 상황 질문, 법적 의무부터 답할 점검, 영역별 진행률', () => {
+  const { ws } = setup()
+  const { start, checks } = assess(catalog, ws.load(), ws, day)
+  assert.ok(start.facts.length > 5)
+  assert.ok(start.facts[0]!.checks + start.facts[0]!.obligations >= start.facts.at(-1)!.checks + start.facts.at(-1)!.obligations)
+  const first = checks.find((c) => c.check.id === start.checks[0])!
+  assert.equal(first.status, 'unanswered')
+  assert.equal(first.legal, true)
+  const total = start.domains.reduce((n, d) => n + d.applicable, 0)
+  assert.equal(total, checks.filter((c) => c.status !== 'na').length)
+})

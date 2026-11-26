@@ -66,6 +66,8 @@ const obligationSchema = z.strictObject({
   when: conditionSchema,
   verifyWhen: conditionSchema.optional(),
   verify: z.string().optional(),
+  /** 입법예고안 등 확정 전 기준: 해당해도 "해당"이 아니라 "확인 필요"로 보여 줍니다. */
+  draft: z.boolean().optional(),
   basis: z.string(),
   required: z.string(),
   otherwise: z.string(),

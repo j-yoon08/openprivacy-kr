@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { assess, statusNames } from './assess.ts'
 import { loadCatalog } from './catalog.ts'
 import { documentKinds, render, type DocumentKind } from './documents.ts'
+import { exportEvidence } from './export.ts'
 import { importProwler, mergeFindings, scanGithub, scanRepo, scanTls, scanWeb } from './scanners.ts'
 import { loadLaw, roleNames } from './law.ts'
 import { heading, renderReview, reviewSituation, tierNames } from './review.ts'
@@ -18,6 +19,7 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
   init                          작업 폴더 만들기
   serve [--port 4820]           웹 화면 열기(127.0.0.1에만 열림)
   assess [--json] [--strict]    부족한 점과 개선 방법 보기
+  next                          어디부터 답할지: 판정을 많이 여는 상황 질문, 먼저 답할 점검, 영역별 진행률
   review [--text 글 | --file 파일] [--yes id,id] [--no id,id] [--title 제목] [--full] [-o 파일]
                                 상황을 법·시행령·고시 전체 조문과 대조(주제 ID는 law topics)
   law [검색어]                  법령 전문 검색(예: law 제34조, law 국외 이전)
@@ -26,6 +28,7 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
                                 ${Object.entries(documentKinds).map(([k, [t]]) => `${k}: ${t}`).join('\n                                ')}
   evidence add <파일> --title 제목 --checks id,id [--owner 담당] [--days 365]
   evidence status               만료·분실·변경된 증적 보기
+  export evidence -o <폴더>     심사 제출용 증적 묶음(파일 사본, 증적 목록, ISMS-P 항목별 증적표)
   scan repo <폴더>              소스의 개인정보·비밀정보·취약 설정 점검
   scan github <owner/repo>      저장소 보안 설정 점검(GITHUB_TOKEN 사용)
   scan tls <host[:port]>        TLS·인증서 점검(권한이 있는 대상만)
@@ -93,6 +96,25 @@ async function main(): Promise<void> {
         if (stale.length) console.log(`1년 넘게 다시 확인하지 않은 답변 ${stale.length}건: ${stale.map((c) => c.check.id).join(', ')}`)
       }
       if (values.strict && open.some((c) => c.legal)) process.exitCode = 2
+      return
+    }
+    case 'export': {
+      if (sub !== 'evidence') throw new InputError('export evidence -o <폴더>를 쓰세요')
+      const r = exportEvidence(catalog, ws, need(values.output, '-o <폴더>'), today())
+      console.log(`증적 파일 ${r.files}개를 복사했습니다${r.skipped ? `(파일이 없거나 내용이 바뀐 ${r.skipped}개는 목록에만 표시)` : ''}: ${resolve(values.output!)}`)
+      return
+    }
+    case 'next': {
+      const { start } = assess(catalog, ws.load(), ws, today())
+      console.log('먼저 답할 상황 질문 (판정이 많이 열리는 순)')
+      if (!start.facts.length) console.log('- 없음')
+      for (const f of start.facts.slice(0, 10)) console.log(`- ${f.label} — 점검 ${f.checks}개${f.obligations ? `, 법적 의무 ${f.obligations}개` : ''} 판정에 필요`)
+      const byId = new Map(catalog.checks.map((c) => [c.id, c]))
+      console.log('\n먼저 답할 점검 (법적 의무·심각도 순)')
+      if (!start.checks.length) console.log('- 없음')
+      for (const id of start.checks) console.log(`- ${id}: ${byId.get(id)!.need}`)
+      console.log('\n영역별 진행률')
+      for (const d of start.domains) console.log(`- ${d.domain}: ${d.answered}/${d.applicable}`)
       return
     }
     case 'doc': {

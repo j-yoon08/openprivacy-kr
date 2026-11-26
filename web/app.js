@@ -123,7 +123,8 @@ const gapFilter = { status: '', domain: '', legal: '', fw: '', q: '' }
 const checkFilter = { mode: 'all', domain: '', q: '' }
 const ismspFilter = { status: '', area: '', q: '' }
 const lawFilter = { q: '', source: '', role: '', upcomingOnly: false, annexOnly: false }
-const pre = { check: '', risk: null, focusCheck: '' }
+const pre = { check: '', risk: null, focusCheck: '', focusFact: '' }
+let startPanelCollapsed = false
 
 const situation = {
   title: '',
@@ -330,6 +331,7 @@ function stripReconfirm(answers) {
 }
 /** 저장 요청을 차례로 보내 늦게 도착한 응답이 새 값을 덮지 않게 합니다. */
 function save(name, value, rerender = false, onSaved) {
+  const originView = current
   saved.className = ''
   saved.textContent = '저장 중…'
   const payload = JSON.stringify(value)
@@ -350,8 +352,13 @@ function save(name, value, rerender = false, onSaved) {
       } else if (!pending) {
         updateChrome()
       }
-      if (onSaved) onSaved(state)
-      if (rerender) draw()
+      if (onSaved && originView === current) onSaved(state)
+      const active = document.activeElement
+      const isTyping =
+        active &&
+        (active.tagName === 'TEXTAREA' ||
+          (active.tagName === 'INPUT' && !['radio', 'checkbox', 'button', 'submit'].includes(active.type)))
+      if (rerender || (!pending && originView !== current && !isTyping)) draw()
     } catch (e) {
       pending = Math.max(0, pending - 1)
       fail(e)
@@ -633,6 +640,18 @@ function jumpToCheck(checkId) {
   checkFilter.q = ''
   pre.focusCheck = checkId
   go('checks')
+}
+
+function jumpToFact(factId) {
+  pre.focusFact = factId
+  go('facts')
+}
+
+function formatFactUnlock(f) {
+  const parts = []
+  if (f.checks > 0) parts.push(`점검 ${f.checks}개`)
+  if (f.obligations > 0) parts.push(`법적 의무 ${f.obligations}개`)
+  return parts.length ? `${parts.join(' · ')} 판정에 필요` : '판정에 필요'
 }
 
 function provisionEl(p, opts = {}) {
@@ -960,6 +979,222 @@ function homeView() {
   }
   syncStaleBanner()
 
+  const start = a.start ?? { facts: [], checks: [], domains: [] }
+  const hasStart = start.facts.length > 0 || start.checks.length > 0
+  let startPanel = null
+  if (hasStart) {
+    const byCheck = new Map(a.checks.map((c) => [c.check.id, c]))
+    const topFacts = start.facts.slice(0, 5)
+    const topChecks = start.checks.slice(0, 10).map((id) => byCheck.get(id)).filter(Boolean)
+    const summaryParts = []
+    if (start.facts.length > 0) summaryParts.push(`판정에 필요한 상황 질문 ${start.facts.length}개`)
+    if (a.counts.unanswered > 0) summaryParts.push(`미응답 점검 ${a.counts.unanswered}개`)
+    else if (start.checks.length > 0) summaryParts.push(`먼저 답할 점검 ${start.checks.length}개`)
+
+    const startBody = h(
+      'div',
+      { class: 'start-body', id: 'start-panel-body', hidden: startPanelCollapsed },
+      h(
+        'div',
+        { class: 'start-grid' },
+        h(
+          'div',
+          { class: 'start-col-side' },
+          h(
+            'div',
+            { class: 'start-block', 'data-start-facts': '1' },
+            h(
+              'div',
+              { class: 'start-subhead' },
+              h(
+                'div',
+                { class: 'row' },
+                h('h3', {}, '먼저 답할 상황 질문'),
+                start.facts.length > 0
+                  ? h('span', { class: 'small muted num' }, `상위 ${topFacts.length}/${start.facts.length}개`)
+                  : null,
+              ),
+              start.facts.length > topFacts.length
+                ? h('button', { type: 'button', class: 'compact ghost', onclick: () => go('facts') }, '상황 입력 전체 보기')
+                : null,
+            ),
+            topFacts.length
+              ? h(
+                  'ul',
+                  { class: 'start-list', role: 'list' },
+                  topFacts.map((f) =>
+                    h(
+                      'li',
+                      { class: 'start-item', 'data-start-fact-id': f.id },
+                      h(
+                        'div',
+                        { class: 'start-item-main' },
+                        h('div', { class: 'start-item-title' }, f.label),
+                        h('div', { class: 'start-item-meta small muted num' }, formatFactUnlock(f)),
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          class: 'compact start-action-btn',
+                          'data-jump-fact': f.id,
+                          'aria-label': `${f.label} 상황 입력으로 이동`,
+                          onclick: () => jumpToFact(f.id),
+                        },
+                        '입력하기',
+                      ),
+                    ),
+                  ),
+                )
+              : h('p', { class: 'small muted' }, '판정에 필요한 상황 질문을 모두 입력했습니다.'),
+          ),
+          start.domains.length
+            ? h(
+                'div',
+                { class: 'start-block', 'data-start-domains': '1' },
+                h('div', { class: 'start-subhead' }, h('h3', {}, '영역별 진행률')),
+                h(
+                  'ul',
+                  { class: 'domain-progress-list', role: 'list' },
+                  start.domains.map((d) => {
+                    const pct = d.applicable ? Math.round((d.answered / d.applicable) * 100) : 0
+                    const label = `${d.domain} 진행률: 적용 ${d.applicable}개 중 ${d.answered}개 응답 (${pct}%)`
+                    return h(
+                      'li',
+                      { class: 'domain-progress-item', 'data-domain': d.domain },
+                      h(
+                        'div',
+                        { class: 'domain-progress-head' },
+                        h('span', { class: 'domain-progress-name' }, d.domain),
+                        h('span', { class: 'small muted num' }, `${d.answered}/${d.applicable} (${pct}%)`),
+                      ),
+                      h(
+                        'progress',
+                        {
+                          class: `domain-progress${d.applicable > 0 && d.answered >= d.applicable ? ' is-complete' : ''}`,
+                          max: d.applicable || 1,
+                          value: d.answered,
+                          'aria-label': label,
+                        },
+                        `${d.answered}/${d.applicable} (${pct}%)`,
+                      ),
+                    )
+                  }),
+                ),
+              )
+            : null,
+        ),
+        h(
+          'div',
+          { class: 'start-col-main' },
+          h(
+            'div',
+            { class: 'start-block', 'data-start-checks': '1' },
+            h(
+              'div',
+              { class: 'start-subhead' },
+              h(
+                'div',
+                { class: 'row' },
+                h('h3', {}, '먼저 답할 점검'),
+                start.checks.length > 0
+                  ? h('span', { class: 'small muted num' }, `상위 ${topChecks.length}/${start.checks.length}개`)
+                  : null,
+              ),
+              start.checks.length > 0
+                ? h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'compact ghost',
+                      'data-open-start-filter': '1',
+                      onclick: () => {
+                        checkFilter.mode = 'start'
+                        checkFilter.domain = ''
+                        checkFilter.q = ''
+                        go('checks')
+                      },
+                    },
+                    `먼저 답할 질문 ${start.checks.length}개 보기`,
+                  )
+                : null,
+            ),
+            topChecks.length
+              ? h(
+                  'ol',
+                  { class: 'start-list start-check-list' },
+                  topChecks.map((c) =>
+                    h(
+                      'li',
+                      { class: 'start-item', 'data-start-check-id': c.check.id },
+                      h(
+                        'div',
+                        { class: 'start-item-main' },
+                        h(
+                          'div',
+                          { class: 'row small muted' },
+                          c.legal ? tag('s-required', '법적 의무') : null,
+                          h('span', {}, c.check.domain),
+                          h('span', { class: 'mono' }, c.check.id),
+                        ),
+                        h('div', { class: 'start-item-title' }, c.check.need),
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          class: 'compact start-action-btn',
+                          'data-jump-check': c.check.id,
+                          'aria-label': `${c.check.need} 점검으로 이동`,
+                          onclick: () => jumpToCheck(c.check.id),
+                        },
+                        '답하기',
+                      ),
+                    ),
+                  ),
+                )
+              : h('p', { class: 'small muted' }, '현재 적용되는 점검 항목에 모두 답했습니다.'),
+          ),
+        ),
+      ),
+    )
+
+    const toggleBtn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'compact',
+        'data-start-toggle': '1',
+        'aria-expanded': startPanelCollapsed ? 'false' : 'true',
+        'aria-controls': 'start-panel-body',
+        onclick: () => {
+          startPanelCollapsed = !startPanelCollapsed
+          startBody.hidden = startPanelCollapsed
+          toggleBtn.setAttribute('aria-expanded', startPanelCollapsed ? 'false' : 'true')
+          toggleBtn.textContent = startPanelCollapsed ? '펼치기' : '접기'
+        },
+      },
+      startPanelCollapsed ? '펼치기' : '접기',
+    )
+
+    startPanel = h(
+      'section',
+      { class: 'panel start-panel', 'data-start-panel': '1', 'aria-labelledby': 'start-panel-heading' },
+      h(
+        'div',
+        { class: 'start-head' },
+        h(
+          'div',
+          { class: 'start-head-main' },
+          h('h2', { id: 'start-panel-heading' }, '어디부터 답할까요'),
+          h('p', { class: 'small muted num' }, summaryParts.join(' · ')),
+        ),
+        toggleBtn,
+      ),
+      startBody,
+    )
+  }
+
   return [
     h(
       'div',
@@ -997,6 +1232,7 @@ function homeView() {
         )
       : null,
     staleBanner,
+    startPanel,
     h(
       'section',
       { class: 'panel summary' },
@@ -1088,6 +1324,8 @@ function homeView() {
 // 2. 상황 입력 (facts)
 // =========================================================================
 function factsView() {
+  const focusFactId = pre.focusFact
+  pre.focusFact = ''
   const p = draft('profile')
   const countEls = new Map()
   const updateCounts = () => {
@@ -1126,6 +1364,17 @@ function factsView() {
       })
     }
     return h('input', { value: v ?? '', onchange: (e) => set(f.id, e.target.value.trim()) })
+  }
+
+  if (focusFactId) {
+    queueMicrotask(() => {
+      const wrap = main.querySelector(`label.field[data-fact-id="${CSS.escape(focusFactId)}"]`)
+      if (wrap) {
+        scrollIntoViewSafe(wrap)
+        const ctrl = wrap.querySelector('input, select, textarea')
+        if (ctrl) ctrl.focus({ preventScroll: true })
+      }
+    })
   }
 
   return [
@@ -1192,7 +1441,18 @@ function factsView() {
     ),
     ...state.catalog.factGroups.flatMap((g, idx) => [
       h('h2', { id: `facts-g-${idx}` }, g.title),
-      h('section', { class: 'panel grid' }, g.facts.map((f) => field(f.unit ? `${f.label} (${f.unit})` : f.label, input(f), f.help))),
+      h(
+        'section',
+        { class: 'panel grid' },
+        g.facts.map((f) => {
+          const ctrl = input(f)
+          ctrl.dataset.factInput = f.id
+          const wrap = field(f.unit ? `${f.label} (${f.unit})` : f.label, ctrl, f.help)
+          wrap.dataset.factId = f.id
+          if (focusFactId === f.id) wrap.classList.add('is-focused')
+          return wrap
+        }),
+      ),
     ]),
     h('div', { class: 'row' }, h('button', { type: 'button', class: 'primary', onclick: () => queue.then(() => go('checks')) }, '점검으로 이동')),
   ]
@@ -1216,11 +1476,28 @@ function checksView() {
   const rowRefs = new Map()
   const domainPanels = []
   const modeBtnRefs = new Map()
+  let renderedStartIds = null
+
+  const filteredStartIds = () => {
+    const byId = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+    const q = checkFilter.q.trim().toLowerCase()
+    return (state.assessment.start?.checks ?? []).filter((id) => {
+      const c = byId.get(id)
+      if (!c) return false
+      if (checkFilter.domain && c.check.domain !== checkFilter.domain) return false
+      if (q) {
+        const note = state.data.answers[c.check.id]?.note ?? ''
+        if (!`${c.check.id} ${c.check.need} ${c.check.domain} ${refs(c)} ${c.reason} ${note}`.toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  }
 
   const computeModeCounts = () => {
     const cur = scopedOf(state.assessment)
     return {
       all: cur.length,
+      start: (state.assessment.start?.checks ?? []).length,
       unanswered: cur.filter((c) => state.data.answers[c.check.id]?.value === undefined).length,
       open: cur.filter(isOpen).length,
       stale: cur.filter((c) => c.stale).length,
@@ -1231,6 +1508,7 @@ function checksView() {
     const counts = computeModeCounts()
     const labels = {
       all: `전체 (${counts.all})`,
+      start: `먼저 답할 질문 (${counts.start})`,
       unanswered: `미응답만 (${counts.unanswered})`,
       open: `부족·개선 필요 (${counts.open})`,
       stale: `재확인 필요 (${counts.stale})`,
@@ -1243,6 +1521,29 @@ function checksView() {
   }
 
   const refreshRowStatuses = () => {
+    if (checkFilter.mode === 'start' && pending === 0) {
+      const nextIds = filteredStartIds()
+      const changed =
+        !renderedStartIds ||
+        nextIds.length !== renderedStartIds.length ||
+        nextIds.some((id, idx) => id !== renderedStartIds[idx])
+      if (changed) {
+        const activeRow = document.activeElement?.closest?.('.check')
+        const activeId = activeRow?.dataset?.checkId ?? ''
+        const activeIdx = renderedStartIds ? renderedStartIds.indexOf(activeId) : -1
+        renderDomains()
+        updateModeBar()
+        if (activeId) {
+          const targetId = nextIds.includes(activeId)
+            ? activeId
+            : nextIds[Math.min(Math.max(activeIdx, 0), nextIds.length - 1)]
+          const targetRow = targetId ? listWrap.querySelector(`.check[data-check-id="${CSS.escape(targetId)}"]`) : null
+          const fallback = targetRow?.querySelector('input:checked, input, button') ?? modeBtnRefs.get('start')
+          if (fallback) fallback.focus({ preventScroll: true })
+        }
+        return
+      }
+    }
     const byId = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
     for (const [cid, ref] of rowRefs) {
       const fresh = byId.get(cid)
@@ -1270,7 +1571,7 @@ function checksView() {
     updateModeBar()
   }
 
-  function answerRow(c) {
+  function answerRow(c, { showDomain = false } = {}) {
     const freshCheck = () => state.assessment.checks.find((x) => x.check.id === c.check.id) ?? c
     const cur = freshCheck()
     const ans = () => state.data.answers[c.check.id] ?? { note: '', owner: '', due: '' }
@@ -1340,6 +1641,7 @@ function checksView() {
           { class: 'row small muted' },
           statusTag,
           cur.legal ? tag('s-required', '법적 의무') : null,
+          showDomain ? h('span', {}, c.check.domain) : null,
           staleEl,
           reconfirmBtn,
           dateEl,
@@ -1415,6 +1717,24 @@ function checksView() {
     },
   })
   const shownCountEl = h('span', { class: 'small muted num' }, '')
+  const expandAllBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact',
+      onclick: () =>
+        domainPanels.forEach(({ det, populate }) => {
+          populate()
+          det.open = true
+        }),
+    },
+    '모두 펼치기',
+  )
+  const collapseAllBtn = h(
+    'button',
+    { type: 'button', class: 'compact', onclick: () => domainPanels.forEach(({ det }) => (det.open = false)) },
+    '모두 접기',
+  )
 
   const renderDomains = () => {
     domainMetaEls.clear()
@@ -1422,6 +1742,36 @@ function checksView() {
     domainPanels.length = 0
     const curScoped = scopedOf(state.assessment)
     const q = checkFilter.q.trim().toLowerCase()
+
+    if (checkFilter.mode === 'start') {
+      const byId = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+      const startIds = filteredStartIds()
+      renderedStartIds = startIds
+      const list = startIds.map((id) => byId.get(id)).filter(Boolean)
+      shownCountEl.textContent = `${list.length}/${curScoped.length}항목`
+      resetBtn.hidden = false
+      expandAllBtn.hidden = true
+      collapseAllBtn.hidden = true
+      listWrap.replaceChildren(
+        list.length
+          ? h(
+              'section',
+              { class: 'panel', 'data-start-check-list': '1' },
+              list.map((c) => answerRow(c, { showDomain: true })),
+            )
+          : h(
+              'p',
+              { class: 'notice' },
+              (state.assessment.start?.checks ?? []).length ? '조건에 맞는 점검 항목이 없습니다.' : '먼저 답할 미응답 점검 항목이 없습니다.',
+            ),
+      )
+      return
+    }
+
+    renderedStartIds = null
+    expandAllBtn.hidden = false
+    collapseAllBtn.hidden = false
+
     const matches = (c) => {
       if (checkFilter.domain && c.check.domain !== checkFilter.domain) return false
       if (checkFilter.mode === 'unanswered' && state.data.answers[c.check.id]?.value !== undefined) return false
@@ -1459,7 +1809,7 @@ function checksView() {
       const populate = () => {
         if (bodyHost.dataset.ready) return
         bodyHost.dataset.ready = '1'
-        bodyHost.replaceChildren(...list.map(answerRow))
+        bodyHost.replaceChildren(...list.map((c) => answerRow(c)))
       }
       if (defaultOpen) populate()
       det.addEventListener('toggle', () => {
@@ -1479,7 +1829,7 @@ function checksView() {
   const modeBar = h(
     'div',
     { class: 'chip-row', role: 'group', 'aria-label': '점검 필터' },
-    ['all', 'unanswered', 'open', 'stale'].map((id) => {
+    ['all', 'start', 'unanswered', 'open', 'stale'].map((id) => {
       const btn = h(
         'button',
         {
@@ -1532,30 +1882,7 @@ function checksView() {
         'div',
         { class: 'row between' },
         modeBar,
-        h(
-          'div',
-          { class: 'row' },
-          shownCountEl,
-          resetBtn,
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'compact',
-              onclick: () =>
-                domainPanels.forEach(({ det, populate }) => {
-                  populate()
-                  det.open = true
-                }),
-            },
-            '모두 펼치기',
-          ),
-          h(
-            'button',
-            { type: 'button', class: 'compact', onclick: () => domainPanels.forEach(({ det }) => (det.open = false)) },
-            '모두 접기',
-          ),
-        ),
+        h('div', { class: 'row' }, shownCountEl, resetBtn, expandAllBtn, collapseAllBtn),
       ),
       h('div', { class: 'filters' }, searchInput, domainSelect),
     ),
