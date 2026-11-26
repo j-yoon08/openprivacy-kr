@@ -35,3 +35,13 @@ test('ISMS-P는 모든 항목에 고시 원문이 있고, 원문의 요건마다
     assert.deepEqual(mapped.filter((id) => !used.has(id)), [], `${r.id}: 요건에 쓰지 않은 연결 점검`)
   }
 })
+
+test('개인정보 보호법은 점검에 연결한 조문마다 처리자의 의무를 요건으로 나누고, 연결된 점검은 모두 요건에 쓰인다', () => {
+  const fw = catalog.frameworks.find((f) => f.id === 'pipa')!
+  for (const r of fw.requirements) {
+    assert.ok(r.points?.length, `${r.id} 요건`)
+    const used = new Set(r.points!.flatMap((p) => p.checks))
+    const mapped = catalog.checks.filter((c) => c.map.pipa.includes(r.id)).map((c) => c.id)
+    assert.deepEqual(mapped.filter((id) => !used.has(id)), [], `${r.id}: 요건에 쓰지 않은 연결 점검`)
+  }
+})
