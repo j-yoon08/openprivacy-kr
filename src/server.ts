@@ -45,6 +45,9 @@ export function createApp(ws: Workspace, catalog: Catalog): { server: Server; to
     const asset = assets[url.pathname]
     if (req.method === 'GET' && asset) return raw(res, asset[1], readFileSync(join(root, 'web', asset[0])))
     if (!url.pathname.startsWith('/api/')) return send(res, 404, { error: '없는 주소' })
+    // 브라우저가 보내는 Origin이 이 서버가 아니면 거절합니다(토큰 확인 위에 한 겹 더)
+    const origin = req.headers.origin
+    if (origin !== undefined && ![`http://127.0.0.1:${port}`, `http://localhost:${port}`].includes(origin)) return send(res, 403, { error: '허용되지 않은 Origin' })
     const given = Buffer.from(String(req.headers['x-openprivacy-token'] ?? ''))
     const expected = Buffer.from(token)
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return send(res, 401, { error: '토큰이 없거나 맞지 않습니다. 터미널에 표시된 주소로 다시 여세요.' })

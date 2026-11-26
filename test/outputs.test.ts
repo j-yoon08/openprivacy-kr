@@ -160,7 +160,7 @@ test('Prowler: 점검별로 모으고 계정 번호를 저장하지 않으며 �
   assert.equal(mergeFindings(a, b, 'prowler', b[0]!.target).length, 2)
 })
 
-test('로컬 서버: 토큰·Host가 틀리면 거부하고, 맞으면 저장한다', async () => {
+test('로컬 서버: 토큰·Host·Origin이 틀리면 거부하고, 맞으면 저장한다', async () => {
   const { ws } = setup()
   const { server, token } = createApp(ws, catalog)
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
@@ -175,6 +175,8 @@ test('로컬 서버: 토큰·Host가 틀리면 거부하고, 맞으면 저장한
   assert.equal((await call('/api/state')).status, 401)
   assert.equal((await call('/api/state', { ...ok, host: 'evil.example' })).status, 403)
   assert.equal((await call('/api/state', ok)).status, 200)
+  assert.equal((await call('/api/state', { ...ok, origin: 'https://evil.example' })).status, 403)
+  assert.equal((await call('/api/state', { ...ok, origin: `http://127.0.0.1:${port}` })).status, 200)
   assert.equal((await call('/../package.json', ok)).status, 404)
   assert.equal((await call('/api/data/findings', ok, 'PUT', '[]')).status, 404)
   assert.equal((await call('/api/data/profile', ok, 'PUT', '{bad')).status, 400)
