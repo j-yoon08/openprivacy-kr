@@ -48,7 +48,17 @@ const frameworkSchema = z.strictObject({
   title: z.string(),
   source: z.string(),
   note: z.string(),
-  requirements: z.array(z.strictObject({ id: z.string(), title: z.string(), group: z.string() })),
+  requirements: z.array(
+    z.strictObject({
+      id: z.string(),
+      title: z.string(),
+      group: z.string(),
+      /** 기준 원문(공개 고시만). 저작권이 있는 표준은 비워 둡니다. */
+      text: z.string().optional(),
+      /** 원문을 확인할 요건으로 나눈 것과, 각 요건을 확인하는 점검 */
+      points: z.array(z.strictObject({ text: z.string().min(1), checks: z.array(z.string()).min(1) })).optional(),
+    }),
+  ),
 })
 const obligationSchema = z.strictObject({
   id: z.string(),
@@ -128,6 +138,15 @@ export function loadCatalog(base = join(root, 'catalog')): Catalog {
       for (const m of c.map[fw.id]) if (!ids.has(m)) problems.push(`${c.id}: ${fw.id}에 없는 조항 ${m}`)
     }
   }
+  const byId = new Map(checks.map((c) => [c.id, c]))
+  for (const fw of frameworks)
+    for (const r of fw.requirements)
+      for (const pt of r.points ?? [])
+        for (const id of pt.checks) {
+          const c = byId.get(id)
+          if (!c) problems.push(`${fw.id} ${r.id}: 없는 점검 ${id}`)
+          else if (!c.map[fw.id].includes(r.id)) problems.push(`${fw.id} ${r.id}: 점검 ${id}의 map에 ${r.id}가 없습니다`)
+        }
   const sourceIds = new Set(sources.sources.map((s) => s.id))
   for (const fw of frameworks) if (!sourceIds.has(fw.source)) problems.push(`${fw.id}: 없는 출처 ${fw.source}`)
   if (problems.length) throw new Error(`카탈로그 오류\n${problems.join('\n')}`)
