@@ -1,6 +1,7 @@
 /**
  * 국가법령정보센터 원문을 내려받아 catalog/law/*.json을 만듭니다.
- *   pnpm law:build   (별표 PDF 추출에 poppler의 pdftotext 필요)
+ *   pnpm law:build           (별표 PDF 추출에 poppler의 pdftotext 필요)
+ *   pnpm law:check           수록본과 현행 원문이 다르면 차이를 출력하고 종료 코드 1
  * 저작권법 제7조에 따라 법령·고시 원문은 보호받지 않는 저작물입니다.
  */
 import { execFileSync } from 'node:child_process'
@@ -131,8 +132,58 @@ const sets = [
   ['decree', '개인정보 보호법 시행령', () => law('개인정보보호법시행령', '영 ')],
   ['safeguard', '개인정보의 안전성 확보조치 기준', () => notice('개인정보의안전성확보조치기준', '기준 ')],
 ] as const
-for (const [id, title, load] of sets) {
-  const d = await load()
-  writeFileSync(join(out, `${id}.json`), JSON.stringify({ id, title, fetchedOn: new Date().toISOString().slice(0, 10), ...d }, null, 1) + '\n')
-  console.log(title, d.version, d.effective, '조', d.articles.filter((a) => !a.deleted && a.text).length, '삭제', d.articles.filter((a) => a.deleted).length, '예정', d.articles.filter((a) => a.upcoming).map((a) => a.id).join(','), '별표', d.annexes.map((a) => a.id).join(','), '부칙', d.addenda.length)
+
+/** 저장된 사본과 새로 받은 원문을 비교합니다(내려받은 날짜는 빼고). */
+function diffArticles(id: string, before: Built, after: Built): string[] {
+  const out: string[] = []
+  if (before.version !== after.version || before.effective !== after.effective) out.push(`${id}: 판 ${before.version}(${before.effective}) → ${after.version}(${after.effective})`)
+  const key = (a: Article) => JSON.stringify([a.text, a.deleted ?? false, a.pending ?? '', a.upcoming ?? null])
+  const old = new Map(before.articles.map((a) => [a.id, key(a)]))
+  const now = new Map(after.articles.map((a) => [a.id, key(a)]))
+  const changed = [...now].filter(([k, v]) => old.get(k) !== v).map(([k]) => k)
+  const removed = [...old.keys()].filter((k) => !now.has(k))
+  if (changed.length) out.push(`${id}: 바뀌거나 새로 생긴 조문 ${changed.join(', ')}`)
+  if (removed.length) out.push(`${id}: 없어진 조문 ${removed.join(', ')}`)
+  const annex = (b: Built) => JSON.stringify(b.annexes.map((a) => [a.id, a.text]))
+  if (annex(before) !== annex(after)) out.push(`${id}: 별표가 바뀜`)
+  return out
+}
+type Built = Awaited<ReturnType<typeof law>>
+
+/** 수록하지 않은 근거(정보통신망법, 인증 고시)는 판과 시행일만 비교합니다. */
+async function headerOf(url: string): Promise<{ effective: string; version: string }> {
+  const kind = url.includes('/행정규칙/') ? 'admRul' : 'ls'
+  const page = (await get(url)).toString('utf8')
+  const html = kind === 'admRul'
+    ? (await get(`${base}/LSW/admRulInfoR.do?admRulSeq=${/admRulSeq:"(\d+)"/.exec(page)![1]}&chrClsCd=010201&joTpYn=Y&languageType=KO`)).toString('utf8')
+    : (await get(`${base}/LSW/lsInfoR.do?lsiSeq=${/lsiSeq\s*\?\s*lsiSeq\s*:\s*'(\d+)/.exec(page)![1]}&chrClsCd=010202&urlMode=lsInfoP&efYd=${/efYd = '(\d{8})/.exec(page)![1]}&ancYnChk=0`)).toString('utf8')
+  return header(plain(html))
+}
+
+if (process.argv.includes('--check')) {
+  const { parse } = await import('yaml')
+  const { readFileSync } = await import('node:fs')
+  const problems: string[] = []
+  for (const [id, , load] of sets) {
+    const before = JSON.parse(readFileSync(join(out, `${id}.json`), 'utf8')) as Built
+    problems.push(...diffArticles(id, before, await load()))
+  }
+  const sources = parse(readFileSync(join(out, '..', 'sources.yaml'), 'utf8')) as { sources: { id: string; title: string; version: string; effective: string; url: string }[] }
+  for (const s of sources.sources.filter((x) => x.url.includes('law.go.kr'))) {
+    const h = await headerOf(s.url)
+    // "법률 제21445호"처럼 번호가 있으면 번호까지, "현행본"처럼 없으면 시행일만 비교합니다
+    const versionKnown = !s.version.includes('호') || s.version.includes(h.version)
+    if (h.effective !== s.effective || !versionKnown) problems.push(`${s.title}: sources.yaml ${s.version}(${s.effective}) / 국가법령정보센터 ${h.version}(${h.effective})`)
+  }
+  if (problems.length) {
+    console.log(`근거 법령이 바뀌었습니다. pnpm law:build로 다시 만들고 카탈로그의 점검·의무·시행일을 검토하세요.\n\n${problems.map((p) => `- ${p}`).join('\n')}`)
+    process.exit(1)
+  }
+  console.log('근거 법령이 수록본과 같습니다.')
+} else {
+  for (const [id, title, load] of sets) {
+    const d = await load()
+    writeFileSync(join(out, `${id}.json`), JSON.stringify({ id, title, fetchedOn: new Date().toISOString().slice(0, 10), ...d }, null, 1) + '\n')
+    console.log(title, d.version, d.effective, '조', d.articles.filter((a) => !a.deleted && a.text).length, '삭제', d.articles.filter((a) => a.deleted).length, '예정', d.articles.filter((a) => a.upcoming).map((a) => a.id).join(','), '별표', d.annexes.map((a) => a.id).join(','), '부칙', d.addenda.length)
+  }
 }

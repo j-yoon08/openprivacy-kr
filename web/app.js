@@ -310,6 +310,9 @@ function fail(e) {
 
 let queue = Promise.resolve()
 let pending = 0
+let deferredSaves = 0
+let activeViewFlush = null
+let activeViewCleanup = null
 function stripReconfirm(answers) {
   if (!answers || typeof answers !== 'object') return answers
   let changed = false
@@ -339,10 +342,12 @@ function save(name, value, rerender = false, onSaved) {
       // 아직 보내지 않은 입력이 있으면 화면의 값이 서버보다 새것입니다
       if (--pending > 0) fresh.data = state.data
       state = fresh
-      if (!pending) {
+      if (!pending && !deferredSaves) {
         saved.className = ''
         saved.textContent = '저장됨'
         clearAlert()
+        updateChrome()
+      } else if (!pending) {
         updateChrome()
       }
       if (onSaved) onSaved(state)
@@ -526,12 +531,19 @@ function updateChrome() {
 
 function draw() {
   if (!state) return
+  if (activeViewCleanup) {
+    const cleanup = activeViewCleanup
+    activeViewCleanup = null
+    activeViewFlush = null
+    cleanup()
+  }
   updateChrome()
   main.replaceChildren(...[viewMeta[current].render()].flat(9).filter(Boolean))
 }
 
 function go(id, { push = true } = {}) {
   if (!Object.hasOwn(viewMeta, id)) return
+  if (activeViewFlush) activeViewFlush()
   if (shell.classList.contains('nav-open')) setNavOpen(false)
   current = id
   if (push && location.hash !== `#${id}`) {
@@ -3268,50 +3280,778 @@ function lawView() {
 // =========================================================================
 const flowFields = {
   name: ['업무 이름', '예: 회원 가입·관리'],
-  purpose: ['처리 목적', ''],
+  purpose: ['처리 목적', '예: 회원 관리와 주문 이행'],
   subjects: ['정보주체', '예: 쇼핑몰 회원'],
   items: ['개인정보 항목', '예: 이름, 휴대전화번호'],
   legalBasis: ['처리 근거', '예: 법 제15조①4 계약 이행'],
-  source: ['수집 출처', ''],
-  retention: ['보유기간', ''],
-  destruction: ['파기 방법', ''],
-  thirdParties: ['제3자 제공', '없으면 비움'],
+  source: ['수집 출처', '예: 본인 입력'],
+  retention: ['보유기간', '예: 회원 탈퇴 시까지'],
+  destruction: ['파기 방법', '예: DB 영구 삭제'],
   processors: ['처리 위탁', '없으면 비움'],
-  overseas: ['국외 이전', '없으면 비움'],
-  systems: ['시스템', ''],
+  systems: ['시스템', '예: 쇼핑몰 DB'],
+}
+
+const transferBasisOptions = {
+  '': '선택',
+  consent: '별도 동의 (법 제28조의8①1)',
+  law: '법률·조약 (①2)',
+  contract: '계약 이행을 위한 위탁·보관 (①3)',
+  certified: '이전받는 자의 인증 (①4)',
+  adequacy: '보호수준 동등성 인정 (①5)',
+}
+
+const transferFields = [
+  ['basis', '이전 근거', 'select', transferBasisOptions, ''],
+  ['items', '이전 항목', 'text', null, '예: 이름, 연락처, 상담 내용'],
+  ['country', '국가', 'text', null, '예: 미국'],
+  ['timing', '시기', 'text', null, '예: 상담 접수 시'],
+  ['method', '방법', 'text', null, '예: 네트워크 전송(TLS)'],
+  ['recipient', '받는 자', 'text', null, '예: Example Desk Inc.'],
+  ['contact', '받는 자 연락처', 'text', null, '예: privacy@example.com'],
+  ['purpose', '이용 목적', 'text', null, '예: 상담 시스템 운영'],
+  ['retention', '보유·이용 기간', 'text', null, '예: 계약 종료 시까지'],
+  ['refusal', '거부 방법·절차·효과', 'wide', null, '예: 고객센터로 거부 요청 가능, 거부 시 상담 이용 제한'],
+]
+
+const provisionBasisOptions = {
+  '': '선택',
+  consent: '동의',
+  law: '제15조①2·3·5~7 목적 범위',
+  related: '제17조④ 합리적 관련 범위',
+}
+
+const provisionFields = [
+  ['basis', '제공 근거', 'select', provisionBasisOptions, ''],
+  ['recipient', '제공받는 자', 'text', null, '예: 예시택배'],
+  ['purpose', '이용 목적', 'text', null, '예: 상품 배송'],
+  ['items', '제공 항목', 'text', null, '예: 이름, 주소, 휴대전화번호'],
+  ['retention', '보유·이용 기간', 'text', null, '예: 배송 완료 후 3개월'],
+]
+
+const emptyTransfer = (prefill = {}) => ({
+  basis: '',
+  items: '',
+  country: '',
+  timing: '',
+  method: '',
+  recipient: '',
+  contact: '',
+  purpose: '',
+  retention: '',
+  refusal: '',
+  ...prefill,
+})
+
+const emptyProvision = (prefill = {}) => ({
+  basis: '',
+  recipient: '',
+  purpose: '',
+  items: '',
+  retention: '',
+  ...prefill,
+})
+
+const TRANSFER_ENTRY_ISSUE_RE = /^국외 이전 (\d+)\(/
+const PROVISION_ENTRY_ISSUE_RE = /^제3자 제공 (\d+)\(/
+const LEGACY_TRANSFER_ISSUE = '국외 이전을 한 줄로만 적었습니다'
+const LEGACY_PROVISION_ISSUE = '제3자 제공을 한 줄로만 적었습니다'
+
+const flowOpenMap = new Map()
+
+function partitionFlowIssues(flow, allIssues) {
+  const own = allIssues.filter((i) => i.flowId === flow.id)
+  const transferCount = flow.transfers?.length ?? 0
+  const provisionCount = flow.provisions?.length ?? 0
+  const general = []
+  const legacyTransfers = []
+  const legacyProvisions = []
+  const byTransfer = new Map()
+  const byProvision = new Map()
+
+  for (const iss of own) {
+    const tm = TRANSFER_ENTRY_ISSUE_RE.exec(iss.issue)
+    if (tm) {
+      const idx = Number(tm[1]) - 1
+      if (idx >= 0 && idx < transferCount) {
+        const list = byTransfer.get(idx) ?? []
+        list.push(iss)
+        byTransfer.set(idx, list)
+        continue
+      }
+    }
+    const pm = PROVISION_ENTRY_ISSUE_RE.exec(iss.issue)
+    if (pm) {
+      const idx = Number(pm[1]) - 1
+      if (idx >= 0 && idx < provisionCount) {
+        const list = byProvision.get(idx) ?? []
+        list.push(iss)
+        byProvision.set(idx, list)
+        continue
+      }
+    }
+    if (iss.issue === LEGACY_TRANSFER_ISSUE && flow.overseas && !transferCount) {
+      legacyTransfers.push(iss)
+      continue
+    }
+    if (iss.issue === LEGACY_PROVISION_ISSUE && flow.thirdParties && !provisionCount) {
+      legacyProvisions.push(iss)
+      continue
+    }
+    general.push(iss)
+  }
+
+  return { total: own.length, general, legacyTransfers, legacyProvisions, byTransfer, byProvision }
+}
+
+function issueItemEl(iss) {
+  const isBad = iss.basis === '입력 모순' || iss.issue.includes('주민등록번호')
+  return h(
+    'div',
+    { class: `flow-issue-item${isBad ? ' is-bad' : ''}` },
+    h('div', { class: 'flow-issue-title' }, iss.issue),
+    h('div', { class: 'small' }, iss.fix),
+    h('div', { class: 'flow-issue-meta' }, iss.basis),
+  )
 }
 
 function flowsView() {
   const issuesHost = h('div', {})
-  const renderIssues = () => {
+  const flowRefs = new Map()
+  const pendingPatches = new Map()
+  let patchTimer = null
+
+  const clearPendingState = () => {
+    if (patchTimer !== null) {
+      clearTimeout(patchTimer)
+      patchTimer = null
+    }
+    if (pendingPatches.size > 0) {
+      pendingPatches.clear()
+      deferredSaves = Math.max(0, deferredSaves - 1)
+    }
+  }
+
+  const applyPendingToFlows = (baseFlows) => {
+    if (!pendingPatches.size) return baseFlows
+    const patches = [...pendingPatches.values()]
+    clearPendingState()
+    const next = baseFlows.map((f) => ({
+      ...f,
+      transfers: (f.transfers ?? []).map((x) => ({ ...x })),
+      provisions: (f.provisions ?? []).map((x) => ({ ...x })),
+    }))
+    const byId = new Map(next.map((f) => [f.id, f]))
+    for (const p of patches) {
+      const target = byId.get(p.flowId)
+      if (!target) continue
+      const val = typeof p.value === 'string' ? p.value.trim() : p.value
+      if (p.scope === 'flow') {
+        target[p.field] = val
+      } else if (p.scope === 'transfers' || p.scope === 'provisions') {
+        const list = target[p.scope]
+        if (list[p.index]) list[p.index][p.field] = val
+      }
+    }
+    return next
+  }
+
+  const flushFlowPatches = () => {
+    if (!pendingPatches.size) return
+    const nextFlows = applyPendingToFlows(state.data.flows)
+    save('flows', nextFlows, false, refreshAllIssues)
+  }
+
+  const queueFieldPatch = (flowId, scope, index, fieldKey, rawValue, immediate = false) => {
+    const key = `${flowId}:${scope}:${index}:${fieldKey}`
+    const trimmed = typeof rawValue === 'string' ? rawValue.trim() : rawValue
+    const curFlow = state.data.flows.find((x) => x.id === flowId)
+    const curVal =
+      scope === 'flow'
+        ? curFlow?.[fieldKey] ?? ''
+        : curFlow?.[scope]?.[index]?.[fieldKey] ?? ''
+
+    if (immediate && !pendingPatches.has(key) && trimmed === curVal) return
+
+    const wasEmpty = pendingPatches.size === 0
+    pendingPatches.set(key, { flowId, scope, index, field: fieldKey, value: rawValue })
+    if (wasEmpty) deferredSaves++
+    saved.className = ''
+    saved.textContent = '저장 중…'
+
+    if (immediate) {
+      flushFlowPatches()
+      return
+    }
+    if (patchTimer !== null) clearTimeout(patchTimer)
+    patchTimer = setTimeout(() => {
+      patchTimer = null
+      flushFlowPatches()
+    }, 200)
+  }
+
+  const mutateFlow = (flowId, updater, { rerender = false, afterLocal } = {}) => {
+    const base = applyPendingToFlows(state.data.flows)
+    const next = base.map((f) => (f.id === flowId ? updater(f) : f))
+    save('flows', next, rerender, rerender ? undefined : refreshAllIssues)
+    if (afterLocal) afterLocal()
+  }
+
+  activeViewFlush = flushFlowPatches
+  activeViewCleanup = clearPendingState
+
+  const renderTopSummary = () => {
     const issues = state.assessment.flowIssues
     if (!issues.length) {
       issuesHost.replaceChildren()
       return
     }
+    const countsByFlow = new Map()
+    for (const iss of issues) {
+      const prev = countsByFlow.get(iss.flowId) ?? { id: iss.flowId, name: iss.name, count: 0 }
+      prev.count++
+      countsByFlow.set(iss.flowId, prev)
+    }
     issuesHost.replaceChildren(
       h(
         'section',
-        { class: 'panel' },
-        h('h3', {}, `발견된 누락·모순 (${issues.length}건)`),
-        table(
-          ['업무', '문제', '개선', '근거'],
-          issues.map((i) => [i.name, i.issue, i.fix, i.basis]),
+        { class: 'notice is-warn flow-summary-notice', 'data-flow-issues-summary': '1' },
+        h(
+          'div',
+          { class: 'row between' },
+          h('strong', {}, `발견된 누락·모순 ${issues.length}건`),
+          h('span', { class: 'small muted' }, '각 업무와 이전·제공 카드에서 바로 보완할 수 있습니다.'),
+        ),
+        h(
+          'div',
+          { class: 'chip-row' },
+          [...countsByFlow.values()].map((item) =>
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'compact',
+                onclick: () => {
+                  const ref = flowRefs.get(item.id)
+                  if (!ref) return
+                  ref.det.open = true
+                  flowOpenMap.set(item.id, true)
+                  scrollIntoViewSafe(ref.det)
+                },
+              },
+              `${item.id} ${item.name} (${item.count}건)`,
+            ),
+          ),
         ),
       ),
     )
   }
-  renderIssues()
+
+  const refreshFlowSummary = (flowId) => {
+    const ref = flowRefs.get(flowId)
+    const f = state.data.flows.find((x) => x.id === flowId)
+    if (!ref || !f) return
+    const part = partitionFlowIssues(f, state.assessment.flowIssues)
+    ref.nameEl.textContent = f.name
+    ref.itemsEl.hidden = !f.items
+    ref.itemsEl.textContent = f.items || ''
+
+    const tags = []
+    if (part.total > 0) tags.push(tag('s-partial', `누락·확인 ${part.total}건`))
+    if (f.transfers?.length) tags.push(tag('s-verify', `국외 이전 ${f.transfers.length}건`))
+    else if (f.overseas) tags.push(tag('s-verify', '국외 이전(한 줄)'))
+    if (f.provisions?.length) tags.push(tag('s-noEvidence', `제3자 제공 ${f.provisions.length}건`))
+    else if (f.thirdParties) tags.push(tag('s-noEvidence', '제3자 제공(한 줄)'))
+    if (f.processors) tags.push(tag('s-na', '위탁'))
+    ref.tagsHost.replaceChildren(...tags)
+  }
+
+  const refreshFlowIssues = (flowId) => {
+    const ref = flowRefs.get(flowId)
+    const f = state.data.flows.find((x) => x.id === flowId)
+    if (!ref || !f) return
+    const part = partitionFlowIssues(f, state.assessment.flowIssues)
+
+    ref.flowIssuesHost.hidden = part.general.length === 0
+    ref.flowIssuesHost.replaceChildren(...part.general.map(issueItemEl))
+
+    if (ref.legacyIssuesHosts.transfers) {
+      ref.legacyIssuesHosts.transfers.hidden = part.legacyTransfers.length === 0
+      ref.legacyIssuesHosts.transfers.replaceChildren(...part.legacyTransfers.map(issueItemEl))
+    }
+    if (ref.legacyIssuesHosts.provisions) {
+      ref.legacyIssuesHosts.provisions.hidden = part.legacyProvisions.length === 0
+      ref.legacyIssuesHosts.provisions.replaceChildren(...part.legacyProvisions.map(issueItemEl))
+    }
+
+    for (const [idx, entryRef] of ref.entryRefs.transfers) {
+      const list = part.byTransfer.get(idx) ?? []
+      entryRef.issuesHost.hidden = list.length === 0
+      entryRef.issuesHost.replaceChildren(...list.map(issueItemEl))
+      entryRef.card.classList.toggle('has-issue', list.length > 0)
+      entryRef.statusTag.hidden = list.length === 0
+      entryRef.statusTag.textContent = list.length ? '누락 항목 있음' : ''
+    }
+    for (const [idx, entryRef] of ref.entryRefs.provisions) {
+      const list = part.byProvision.get(idx) ?? []
+      entryRef.issuesHost.hidden = list.length === 0
+      entryRef.issuesHost.replaceChildren(...list.map(issueItemEl))
+      entryRef.card.classList.toggle('has-issue', list.length > 0)
+      entryRef.statusTag.hidden = list.length === 0
+      entryRef.statusTag.textContent = list.length ? '누락 항목 있음' : ''
+    }
+
+    refreshFlowSummary(flowId)
+  }
+
+  const refreshAllIssues = () => {
+    renderTopSummary()
+    for (const flowId of flowRefs.keys()) refreshFlowIssues(flowId)
+  }
+
+  function buildFlowCard(initialFlow) {
+    const flowId = initialFlow.id
+    const liveFlow = () => state.data.flows.find((x) => x.id === flowId) ?? initialFlow
+
+    const nameEl = h('strong', {}, initialFlow.name)
+    const itemsEl = h('span', { class: 'small muted', hidden: !initialFlow.items }, initialFlow.items || '')
+    const tagsHost = h('span', { class: 'row' })
+    const flowIssuesHost = h('div', { class: 'flow-issue-list', 'data-flow-issues': flowId, hidden: true })
+    const provisionsBody = h('div', { class: 'stack' })
+    const transfersBody = h('div', { class: 'stack' })
+    const provisionsCountEl = h('span', { class: 'small muted num' }, '')
+    const transfersCountEl = h('span', { class: 'small muted num' }, '')
+
+    const ref = {
+      det: null,
+      nameEl,
+      itemsEl,
+      tagsHost,
+      flowIssuesHost,
+      legacyIssuesHosts: { transfers: null, provisions: null },
+      entryRefs: { transfers: new Map(), provisions: new Map() },
+      addBtns: { transfers: null, provisions: null },
+    }
+
+    const renderSubSection = (kind, focusTarget = null) => {
+      const f = liveFlow()
+      const isTransfer = kind === 'transfers'
+      const legacyField = isTransfer ? 'overseas' : 'thirdParties'
+      const entries = f[kind] ?? []
+      const fieldsDef = isTransfer ? transferFields : provisionFields
+      const host = isTransfer ? transfersBody : provisionsBody
+      const countEl = isTransfer ? transfersCountEl : provisionsCountEl
+      const titlePrefix = isTransfer ? '국외 이전' : '제3자 제공'
+
+      ref.entryRefs[kind].clear()
+      ref.legacyIssuesHosts[kind] = null
+      countEl.textContent = `${entries.length}건`
+
+      const nodes = []
+
+      if (f[legacyField] && !entries.length) {
+        const legacyIssuesHost = h('div', { class: 'flow-issue-list', hidden: true })
+        ref.legacyIssuesHosts[kind] = legacyIssuesHost
+        nodes.push(
+          h(
+            'div',
+            { class: 'legacy-box', 'data-legacy-box': legacyField },
+            legacyIssuesHost,
+            h('div', { class: 'legacy-label' }, '기존 한 줄 기록 (읽기 전용)'),
+            h('p', { class: 'legacy-text', 'data-legacy-text': legacyField }, f[legacyField]),
+            h(
+              'div',
+              { class: 'row' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  class: 'compact primary',
+                  'data-convert-legacy': kind,
+                  onclick: () => {
+                    mutateFlow(
+                      flowId,
+                      (cur) => {
+                        const oldText = cur[legacyField] || ''
+                        const entry = isTransfer
+                          ? emptyTransfer({ country: oldText })
+                          : emptyProvision({ recipient: oldText })
+                        return { ...cur, [legacyField]: '', [kind]: [entry] }
+                      },
+                      {
+                        afterLocal: () => {
+                          renderSubSection(kind, { type: 'entry', index: 0 })
+                          refreshFlowSummary(flowId)
+                        },
+                      },
+                    )
+                  },
+                },
+                '건별로 나눠 적기',
+              ),
+            ),
+          ),
+        )
+      }
+
+      if (!entries.length && !f[legacyField]) {
+        nodes.push(h('p', { class: 'small muted' }, `등록된 ${titlePrefix}이 없습니다.`))
+      }
+
+      if (entries.length) {
+        const cards = entries.map((entry, idx) => {
+          const n = idx + 1
+          const summaryMetaEl = h('span', { class: 'small muted' }, '')
+          const syncCardMeta = (curEntry) => {
+            if (isTransfer) {
+              const parts = [curEntry.recipient, curEntry.country ? `(${curEntry.country})` : ''].filter(Boolean).join(' ')
+              summaryMetaEl.textContent = parts ? `· ${parts}` : ''
+            } else {
+              summaryMetaEl.textContent = curEntry.recipient ? `· ${curEntry.recipient}` : ''
+            }
+          }
+          syncCardMeta(entry)
+
+          const statusTag = h('span', { class: 'tag s-partial', hidden: true }, '')
+          const entryIssuesHost = h('div', {
+            class: 'entry-issues',
+            'data-entry-issues': `${kind}-${idx}`,
+            hidden: true,
+          })
+
+          const removeBtn = h(
+            'button',
+            {
+              type: 'button',
+              class: 'compact danger',
+              'data-remove-entry': kind,
+              'aria-label': `${titlePrefix} ${n} 삭제`,
+              onclick: () => {
+                mutateFlow(
+                  flowId,
+                  (cur) => ({
+                    ...cur,
+                    [kind]: (cur[kind] ?? []).filter((_, j) => j !== idx),
+                  }),
+                  {
+                    afterLocal: () => {
+                      const nextLen = (liveFlow()[kind] ?? []).length
+                      const nextFocus =
+                        nextLen > 0
+                          ? { type: 'remove', index: Math.min(idx, nextLen - 1) }
+                          : { type: 'add' }
+                      renderSubSection(kind, nextFocus)
+                      refreshFlowSummary(flowId)
+                    },
+                  },
+                )
+              },
+            },
+            '삭제',
+          )
+
+          const fieldCtrls = {}
+          const fieldEls = fieldsDef.map(([fKey, fLabel, fType, fOpts, fPh]) => {
+            const val = entry[fKey] ?? ''
+            const missingBadge = h('span', { class: 'tag s-partial', hidden: Boolean(val) }, '미기재')
+            let wrap = null
+            const syncMissing = (v) => {
+              const empty = !String(v ?? '').trim()
+              missingBadge.hidden = !empty
+              if (wrap) wrap.classList.toggle('is-missing', empty)
+            }
+
+            let ctrl
+            if (fType === 'select') {
+              ctrl = h(
+                'select',
+                {
+                  'data-field': fKey,
+                  onchange: (e) => {
+                    const v = e.target.value
+                    syncMissing(v)
+                    queueFieldPatch(flowId, kind, idx, fKey, v, true)
+                  },
+                },
+                Object.entries(fOpts).map(([ov, ot]) => h('option', { value: ov, selected: ov === val }, ot)),
+              )
+            } else {
+              ctrl = h('input', {
+                type: 'text',
+                'data-field': fKey,
+                value: val,
+                placeholder: fPh,
+                oninput: (e) => {
+                  const v = e.target.value
+                  syncMissing(v)
+                  if (fKey === 'recipient' || fKey === 'country') {
+                    syncCardMeta({
+                      recipient: (fieldCtrls.recipient?.value ?? '').trim(),
+                      country: (fieldCtrls.country?.value ?? '').trim(),
+                    })
+                  }
+                  queueFieldPatch(flowId, kind, idx, fKey, v, false)
+                },
+                onchange: (e) => {
+                  const v = e.target.value
+                  syncMissing(v)
+                  queueFieldPatch(flowId, kind, idx, fKey, v, true)
+                },
+              })
+            }
+            fieldCtrls[fKey] = ctrl
+
+            wrap = h(
+              'label',
+              { class: `field${fType === 'wide' ? ' wide' : ''}${!val ? ' is-missing' : ''}` },
+              h('span', { class: 'field-label-row' }, h('span', {}, fLabel), missingBadge),
+              ctrl,
+            )
+            return wrap
+          })
+
+          const card = h(
+            'div',
+            { class: 'entry-card', 'data-entry-kind': kind, 'data-entry-index': idx },
+            h(
+              'div',
+              { class: 'entry-card-head' },
+              h(
+                'div',
+                { class: 'row' },
+                h('span', { class: 'entry-card-title' }, `${titlePrefix} ${n}`),
+                summaryMetaEl,
+                statusTag,
+              ),
+              removeBtn,
+            ),
+            entryIssuesHost,
+            h('div', { class: 'grid' }, fieldEls),
+          )
+          ref.entryRefs[kind].set(idx, { card, issuesHost: entryIssuesHost, statusTag, removeBtn })
+          return card
+        })
+        nodes.push(h('div', { class: 'entry-list', 'data-entry-list': kind }, cards))
+      }
+
+      host.replaceChildren(...nodes)
+      refreshFlowIssues(flowId)
+
+      if (focusTarget) {
+        if (focusTarget.type === 'entry') {
+          const targetCard = ref.entryRefs[kind].get(focusTarget.index)?.card
+          const firstCtrl = targetCard?.querySelector('select, input')
+          if (firstCtrl) firstCtrl.focus({ preventScroll: true })
+        } else if (focusTarget.type === 'remove') {
+          const targetBtn = ref.entryRefs[kind].get(focusTarget.index)?.removeBtn
+          if (targetBtn) targetBtn.focus({ preventScroll: true })
+        } else if (focusTarget.type === 'add') {
+          ref.addBtns[kind]?.focus({ preventScroll: true })
+        }
+      }
+    }
+
+    const addProvisionBtn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'compact',
+        'data-add-entry': 'provisions',
+        onclick: () => {
+          mutateFlow(
+            flowId,
+            (cur) => ({ ...cur, provisions: [...(cur.provisions ?? []), emptyProvision()] }),
+            {
+              afterLocal: () => {
+                const idx = Math.max(0, (liveFlow().provisions?.length ?? 1) - 1)
+                renderSubSection('provisions', { type: 'entry', index: idx })
+                refreshFlowSummary(flowId)
+              },
+            },
+          )
+        },
+      },
+      '제3자 제공 추가',
+    )
+    const addTransferBtn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'compact',
+        'data-add-entry': 'transfers',
+        onclick: () => {
+          mutateFlow(
+            flowId,
+            (cur) => ({ ...cur, transfers: [...(cur.transfers ?? []), emptyTransfer()] }),
+            {
+              afterLocal: () => {
+                const idx = Math.max(0, (liveFlow().transfers?.length ?? 1) - 1)
+                renderSubSection('transfers', { type: 'entry', index: idx })
+                refreshFlowSummary(flowId)
+              },
+            },
+          )
+        },
+      },
+      '국외 이전 추가',
+    )
+    ref.addBtns.provisions = addProvisionBtn
+    ref.addBtns.transfers = addTransferBtn
+
+    const hasOwnIssue = state.assessment.flowIssues.some((i) => i.flowId === flowId)
+    const defaultOpen = flowOpenMap.has(flowId)
+      ? flowOpenMap.get(flowId)
+      : state.data.flows.length <= 5 || hasOwnIssue
+
+    const det = h(
+      'details',
+      { class: 'panel flow-card', open: defaultOpen, 'data-flow-id': flowId },
+      h(
+        'summary',
+        { class: 'disclosure-head' },
+        h(
+          'span',
+          { class: 'row' },
+          h('span', { class: 'mono small muted' }, flowId),
+          nameEl,
+          itemsEl,
+          tagsHost,
+        ),
+      ),
+      h(
+        'div',
+        { class: 'flow-body' },
+        flowIssuesHost,
+        h(
+          'div',
+          { class: 'grid' },
+          Object.entries(flowFields).map(([k, [l, ph]]) =>
+            field(
+              l,
+              h('input', {
+                type: 'text',
+                'data-flow-field': k,
+                value: initialFlow[k] ?? '',
+                placeholder: ph,
+                required: k === 'name',
+                oninput: (e) => {
+                  const v = e.target.value
+                  if (k === 'name') {
+                    if (!v.trim()) return
+                    nameEl.textContent = v.trim()
+                  }
+                  if (k === 'items') {
+                    itemsEl.hidden = !v.trim()
+                    itemsEl.textContent = v.trim()
+                  }
+                  queueFieldPatch(flowId, 'flow', 0, k, v, false)
+                },
+                onchange: (e) => {
+                  const v = e.target.value
+                  if (k === 'name' && !v.trim()) {
+                    const fallbackName = liveFlow().name
+                    e.target.value = fallbackName
+                    nameEl.textContent = fallbackName
+                    const nameKey = `${flowId}:flow:0:name`
+                    if (pendingPatches.delete(nameKey) && pendingPatches.size === 0) {
+                      clearPendingState()
+                      if (!pending) saved.textContent = '저장됨'
+                    }
+                    return fail(new Error('업무 이름은 비울 수 없습니다'))
+                  }
+                  queueFieldPatch(flowId, 'flow', 0, k, v, true)
+                  if (k === 'processors') refreshFlowSummary(flowId)
+                },
+              }),
+            ),
+          ),
+        ),
+        h(
+          'section',
+          { class: 'flow-subsec', 'data-subsec': 'provisions' },
+          h(
+            'div',
+            { class: 'flow-subsec-head' },
+            h('div', { class: 'row' }, h('h4', {}, '제3자 제공'), provisionsCountEl, h('span', { class: 'small muted' }, '법 제17조')),
+            addProvisionBtn,
+          ),
+          provisionsBody,
+        ),
+        h(
+          'section',
+          { class: 'flow-subsec', 'data-subsec': 'transfers' },
+          h(
+            'div',
+            { class: 'flow-subsec-head' },
+            h('div', { class: 'row' }, h('h4', {}, '국외 이전'), transfersCountEl, h('span', { class: 'small muted' }, '법 제28조의8')),
+            addTransferBtn,
+          ),
+          transfersBody,
+        ),
+        h(
+          'div',
+          { class: 'flow-foot' },
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'compact danger',
+              onclick: () => {
+                const cur = liveFlow()
+                if (!confirm(`"${cur.name}"을(를) 삭제할까요?`)) return
+                const base = applyPendingToFlows(state.data.flows)
+                flowOpenMap.delete(flowId)
+                save(
+                  'flows',
+                  base.filter((x) => x.id !== flowId),
+                  true,
+                )
+              },
+            },
+            '업무 삭제',
+          ),
+        ),
+      ),
+    )
+
+    det.addEventListener('toggle', () => {
+      flowOpenMap.set(flowId, det.open)
+    })
+
+    ref.det = det
+    flowRefs.set(flowId, ref)
+    renderSubSection('provisions')
+    renderSubSection('transfers')
+    refreshFlowIssues(flowId)
+    return det
+  }
+
+  const flowCards = state.data.flows.map(buildFlowCard)
+  renderTopSummary()
 
   const form = h(
     'form',
     { class: 'grid' },
     Object.entries(flowFields).map(([k, [l, ph]]) => field(l, h('input', { name: k, placeholder: ph, required: k === 'name' }))),
-    h('div', { class: 'wide' }, h('button', { type: 'submit', class: 'primary' }, '추가')),
+    h(
+      'div',
+      { class: 'wide row between' },
+      h('span', { class: 'small muted' }, '제3자 제공과 국외 이전은 업무를 추가한 뒤 카드에서 건별로 적을 수 있습니다.'),
+      h('button', { type: 'submit', class: 'primary' }, '추가'),
+    ),
   )
   form.addEventListener('submit', (e) => {
     e.preventDefault()
-    save('flows', [...state.data.flows, { id: `PF-${crypto.randomUUID().slice(0, 8)}`, ...Object.fromEntries(new FormData(form)) }], true)
+    const base = applyPendingToFlows(state.data.flows)
+    const raw = Object.fromEntries(new FormData(form))
+    const cleaned = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, String(v).trim()]))
+    if (!cleaned.name) return fail(new Error('업무 이름을 입력하세요'))
+    const id = `PF-${crypto.randomUUID().slice(0, 8)}`
+    flowOpenMap.set(id, true)
+    save(
+      'flows',
+      [...base, { id, thirdParties: '', overseas: '', provisions: [], transfers: [], ...cleaned }],
+      true,
+    )
   })
 
   return [
@@ -3324,65 +4064,42 @@ function flowsView() {
         h('h1', {}, '개인정보 처리 흐름'),
         h('p', { class: 'muted' }, '업무별로 적으면 누락과 조직 상황과의 모순을 찾아 줍니다. 처리방침과 처리 현황표의 원본이 됩니다.'),
       ),
+      flowCards.length
+        ? h(
+            'div',
+            { class: 'row' },
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'compact',
+                onclick: () =>
+                  flowCards.forEach((d) => {
+                    d.open = true
+                    flowOpenMap.set(d.dataset.flowId, true)
+                  }),
+              },
+              '모두 펼치기',
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'compact',
+                onclick: () =>
+                  flowCards.forEach((d) => {
+                    d.open = false
+                    flowOpenMap.set(d.dataset.flowId, false)
+                  }),
+              },
+              '모두 접기',
+            ),
+          )
+        : null,
     ),
     issuesHost,
-    ...(state.data.flows.length
-      ? state.data.flows.map((f) =>
-          h(
-            'details',
-            { class: 'panel' },
-            h(
-              'summary',
-              { class: 'disclosure-head' },
-              h(
-                'span',
-                { class: 'row' },
-                h('strong', {}, f.name),
-                f.items ? h('span', { class: 'small muted' }, f.items) : null,
-                f.overseas ? tag('s-verify', '국외 이전') : null,
-                f.processors ? tag('s-na', '위탁') : null,
-              ),
-            ),
-            h(
-              'div',
-              { class: 'grid' },
-              Object.entries(flowFields).map(([k, [l]]) =>
-                field(
-                  l,
-                  h('input', {
-                    value: f[k] ?? '',
-                    onchange: (e) =>
-                      save(
-                        'flows',
-                        state.data.flows.map((x) => (x.id === f.id ? { ...x, [k]: e.target.value.trim() } : x)),
-                        false,
-                        renderIssues,
-                      ),
-                  }),
-                ),
-              ),
-            ),
-            h(
-              'div',
-              { class: 'row' },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  class: 'compact danger',
-                  onclick: () =>
-                    confirm(`"${f.name}"을(를) 삭제할까요?`) &&
-                    save(
-                      'flows',
-                      state.data.flows.filter((x) => x.id !== f.id),
-                      true,
-                    ),
-                },
-                '삭제',
-              ),
-            ),
-          ),
-        )
+    ...(flowCards.length
+      ? flowCards
       : [h('p', { class: 'notice' }, '등록된 처리 흐름이 없습니다. 아래에서 업무를 추가하세요.')]),
     h('h2', {}, '업무 추가'),
     h('section', { class: 'panel' }, form),

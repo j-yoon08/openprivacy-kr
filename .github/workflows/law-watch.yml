@@ -1,0 +1,35 @@
+name: law-watch
+# 매주 국가법령정보센터 원문과 수록본을 비교하고, 다르면 이슈를 엽니다.
+on:
+  schedule: [{ cron: "0 0 * * 1" }] # 월요일 09:00 KST
+  workflow_dispatch:
+  pull_request: { paths: [scripts/build-law.ts, .github/workflows/law-watch.yml] }
+permissions: { contents: read, issues: write }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@v4
+        with: { version: 12.16.1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: sudo apt-get install -y --no-install-recommends poppler-utils
+      - run: pnpm install --frozen-lockfile
+      - id: check
+        run: |
+          set +e
+          pnpm --silent law:check > report.txt 2>&1
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat report.txt
+      - if: steps.check.outputs.code == '1' && github.event_name != 'pull_request'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          title="근거 법령 변경 감지"
+          body="$(cat report.txt)"$'\n\n'"실행: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title $title" --json number -q '.[0].number')
+          if [ -n "$num" ]; then gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"; fi
+      - if: steps.check.outputs.code != '0' && (steps.check.outputs.code != '1' || github.event_name == 'pull_request')
+        run: exit 1

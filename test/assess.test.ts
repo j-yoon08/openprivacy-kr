@@ -174,3 +174,18 @@ test('재확인: 값 없는 답변·해당 없는 점검은 재확인 대상이 
   const due = readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
   assert.equal(due.due, '2026-12-31')
 })
+
+test('처리 흐름: 국외 이전·제3자 제공을 한 줄로만 적거나 법정 사항이 빠지면 알려 준다', () => {
+  const { ws } = setup({ overseas: true, thirdParty: true })
+  ws.save('flows', [
+    { id: 'a', name: '상담', purpose: '상담', items: '이름', legalBasis: '계약', retention: '1년', destruction: '삭제', overseas: '미국', thirdParties: '보험사' },
+    { id: 'b', name: '제휴', purpose: '제휴', items: '이름', legalBasis: '동의', retention: '1년', destruction: '삭제',
+      transfers: [{ basis: 'consent', items: '이름', country: '일본', timing: '즉시', method: 'API', recipient: 'JP Co', contact: 'jp@x', purpose: '배송', retention: '1년' }],
+      provisions: [{ basis: 'consent', recipient: '보험사', purpose: '보험 가입', items: '이름' }] },
+  ])
+  const issues = assess(catalog, ws.load(), ws, day).flowIssues.map((i) => `${i.flowId}: ${i.issue}`)
+  assert.ok(issues.includes('a: 국외 이전을 한 줄로만 적었습니다'))
+  assert.ok(issues.includes('a: 제3자 제공을 한 줄로만 적었습니다'))
+  assert.ok(issues.includes('b: 국외 이전 1(JP Co)에 거부 방법·절차·효과이(가) 없습니다'))
+  assert.ok(issues.includes('b: 제3자 제공 1(보험사)에 보유·이용 기간이(가) 없습니다'))
+})

@@ -35,6 +35,12 @@ test('국내에 주소가 없는 사업자의 처리방침은 국내대리인과
   assert.doesNotMatch(small, /국내대리인/, '지정 의무가 없는 소규모 해외 사업자')
   assert.match(small, /처리하는 국가/)
 })
+test('처리방침은 국외 이전을 법정 사항별 열로 나눠 쓰고, 빠진 값은 작성 필요로 남긴다', () => {
+  const { ws } = setup({ overseas: true })
+  ws.save('flows', [{ id: 'b', name: '상담', transfers: [{ basis: 'contract', items: '이름', country: '미국', recipient: 'US Co', contact: 'us@x', purpose: '상담', retention: '1년' }] }])
+  const md = render('privacy-policy', catalog, ws, day)
+  assert.match(md, /\| 상담 \| 계약 이행을 위한 위탁·보관\(①3\) \| 이름 \| 미국 \| 【작성 필요: 시기·방법】 \| US Co \/ us@x \| 상담 \/ 1년 \| 【작성 필요: 거부 방법·절차·효과】 \|/)
+})
 test('운영명세서는 101행, SoA는 93행', () => {
   const { ws } = setup()
   const rows = (k: DocumentKind) => render(k, catalog, ws, day).split('\r\n').filter((l) => /^"(\d\.|A\.)/.test(l)).length
@@ -154,7 +160,7 @@ test('Prowler: 점검별로 모으고 계정 번호를 저장하지 않으며 �
   assert.equal(mergeFindings(a, b, 'prowler', b[0]!.target).length, 2)
 })
 
-test('로컬 서버: 토큰·Host가 틀리면 거부하고, 맞으면 저장한다', async () => {
+test('로컬 서버: 토큰·Host·Origin이 틀리면 거부하고, 맞으면 저장한다', async () => {
   const { ws } = setup()
   const { server, token } = createApp(ws, catalog)
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
@@ -169,6 +175,8 @@ test('로컬 서버: 토큰·Host가 틀리면 거부하고, 맞으면 저장한
   assert.equal((await call('/api/state')).status, 401)
   assert.equal((await call('/api/state', { ...ok, host: 'evil.example' })).status, 403)
   assert.equal((await call('/api/state', ok)).status, 200)
+  assert.equal((await call('/api/state', { ...ok, origin: 'https://evil.example' })).status, 403)
+  assert.equal((await call('/api/state', { ...ok, origin: `http://127.0.0.1:${port}` })).status, 200)
   assert.equal((await call('/../package.json', ok)).status, 404)
   assert.equal((await call('/api/data/findings', ok, 'PUT', '[]')).status, 404)
   assert.equal((await call('/api/data/profile', ok, 'PUT', '{bad')).status, 400)

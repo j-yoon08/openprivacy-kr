@@ -45,7 +45,13 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
     case 'ropa':
       return csv([
         ['업무', '처리 목적', '정보주체', '개인정보 항목', '처리 근거', '수집 출처', '보유기간', '제3자 제공', '처리 위탁', '국외 이전', '시스템', '파기 방법'],
-        ...data.flows.map((f) => [f.name, f.purpose, f.subjects, f.items, f.legalBasis, f.source, f.retention, f.thirdParties, f.processors, f.overseas, f.systems, f.destruction]),
+        ...data.flows.map((f) => [
+          f.name, f.purpose, f.subjects, f.items, f.legalBasis, f.source, f.retention,
+          f.provisions.length ? f.provisions.map((x) => `${x.recipient}: ${x.purpose} / ${x.items} / ${x.retention}`).join('\n') : f.thirdParties,
+          f.processors,
+          f.transfers.length ? f.transfers.map((x) => `${x.recipient}(${x.country}): ${x.items} / ${x.timing} ${x.method} / ${x.purpose} / ${x.retention}`).join('\n') : f.overseas,
+          f.systems, f.destruction,
+        ]),
       ])
     case 'ismsp-statement': {
       const fw = a.frameworks.find((f) => f.id === 'ismsp')
@@ -105,12 +111,15 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ['개인정보의 처리 및 보유 기간', rows(['업무', '보유기간'], fl.map((f) => [f.name, value(f.retention, '보유기간')]))],
       ['개인정보의 파기 절차 및 방법', rows(['업무', '파기 방법'], fl.map((f) => [f.name, value(f.destruction, '파기 방법')])) + (cond('retainedByLaw') ? `\n\n다른 법령에 따라 보존하는 항목: ${todo('보존 근거 법령과 항목')}` : '')],
     ]
-    const third = fl.filter((f) => f.thirdParties)
-    if (third.length || cond('thirdParty')) sections.push(['개인정보의 제3자 제공', rows(['업무', '제공받는 자·목적·항목·기간'], third.map((f) => [f.name, f.thirdParties]))])
+    const third = fl.flatMap((f) => (f.provisions.length ? f.provisions.map((x) => [f.name, value(x.recipient, '제공받는 자'), value(x.purpose, '목적'), value(x.items, '항목'), value(x.retention, '보유·이용 기간')]) : f.thirdParties ? [[f.name, f.thirdParties, todo('목적'), todo('항목'), todo('보유·이용 기간')]] : []))
+    if (third.length || cond('thirdParty')) sections.push(['개인정보의 제3자 제공', rows(['업무', '제공받는 자', '이용 목적', '제공 항목', '보유·이용 기간'], third)])
     const proc = fl.filter((f) => f.processors)
     if (proc.length || cond('outsourcing')) sections.push(['개인정보 처리의 위탁', rows(['업무', '수탁자와 위탁업무(재수탁자 포함)'], proc.map((f) => [f.name, f.processors]))])
-    const over = fl.filter((f) => f.overseas)
-    if (over.length || cond('overseas')) sections.push(['개인정보의 국외 이전', rows(['업무', '이전 근거·항목·국가·시기·방법·받는 자·목적·기간·거부 방법'], over.map((f) => [f.name, f.overseas]))])
+    const basisName = { consent: '별도 동의(법 제28조의8①1)', law: '법률·조약(①2)', contract: '계약 이행을 위한 위탁·보관(①3)', certified: '이전받는 자의 인증(①4)', adequacy: '보호수준 동등성 인정(①5)', '': '' }
+    const over = fl.flatMap((f) => (f.transfers.length
+      ? f.transfers.map((x) => [f.name, value(basisName[x.basis], '이전 근거'), value(x.items, '이전 항목'), value(x.country, '국가'), value([x.timing, x.method].filter(Boolean).join(', '), '시기·방법'), value([x.recipient, x.contact].filter(Boolean).join(' / '), '받는 자·연락처'), value([x.purpose, x.retention].filter(Boolean).join(' / '), '목적·보유기간'), value(x.refusal, '거부 방법·절차·효과')])
+      : f.overseas ? [[f.name, todo('이전 근거'), todo('이전 항목'), f.overseas, todo('시기·방법'), todo('받는 자·연락처'), todo('목적·보유기간'), todo('거부 방법·절차·효과')]] : []))
+    if (over.length || cond('overseas')) sections.push(['개인정보의 국외 이전', rows(['업무', '이전 근거', '이전 항목', '국가', '시기·방법', '받는 자·연락처', '목적·보유기간', '거부 방법·절차·효과'], over)])
     if (cond('sensitive')) sections.push(['민감정보의 공개 가능성 및 비공개 선택 방법', todo('해당되는 경우에만 작성')])
     if (cond('pseudonym')) sections.push(['가명정보의 처리', todo('목적·항목·기간·제공·안전조치')])
     if (cond('autoDecision')) sections.push(['자동화된 결정', todo('기준·절차·처리 방식과 거부·설명 요구 방법(법 제37조의2④)')])
