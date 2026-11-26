@@ -117,6 +117,46 @@ export async function scanGithub(repo: string, token: string | undefined, get: F
   return stamp('github', repo, list)
 }
 
+export type WebFetch = (url: string, init: { redirect: 'manual' | 'follow'; headers: Record<string, string> }) => Promise<{ status: number; url: string; headers: Headers; text(): Promise<string> }>
+
+/** 웹사이트 첫 화면 점검: HTTPS 전환, HSTS, 쿠키 속성, 처리방침 링크(시행령 제31조②). 첫 페이지만 요청합니다. */
+export async function scanWeb(target: string, get: WebFetch = fetch): Promise<Finding[]> {
+  let url: URL
+  try { url = new URL(/^https?:\/\//.test(target) ? target : `https://${target}`) } catch { throw new InputError('https://도메인 형식으로 적으세요') }
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new InputError('https://도메인 형식으로 적으세요')
+  const headers = { 'user-agent': 'openprivacy-kr (+https://github.com/j-yoon08/openprivacy-kr)' }
+  const list: Draft[] = []
+  const http = await get(`http://${url.host}/`, { redirect: 'manual', headers }).catch(() => undefined)
+  const loc = http?.headers.get('location') ?? ''
+  list.push(
+    http === undefined
+      ? { rule: 'https-redirect', status: 'unknown', title: 'HTTP 접속 확인 불가(80 포트 닫힘 가능)', detail: '', checks: ['cry-transit'] }
+      : http.status >= 300 && http.status < 400 && /^https:\/\//i.test(new URL(loc, `http://${url.host}/`).href)
+        ? { rule: 'https-redirect', status: 'pass', title: 'HTTP 접속을 HTTPS로 전환', detail: `${http.status} → ${loc}`, checks: ['cry-transit'] }
+        : { rule: 'https-redirect', status: 'fail', title: 'HTTP로도 화면을 제공(HTTPS로 전환하지 않음)', detail: `HTTP ${http.status}`, checks: ['cry-transit'] },
+  )
+  url.protocol = 'https:'
+  const page = await get(url.href, { redirect: 'follow', headers }).catch((e: Error) => { throw new InputError(`HTTPS로 연결하지 못했습니다: ${e.message}`) })
+  const hsts = /max-age=(\d+)/i.exec(page.headers.get('strict-transport-security') ?? '')
+  const age = hsts ? Number(hsts[1]) : 0
+  list.push({ rule: 'hsts', status: age >= 15_552_000 ? 'pass' : 'fail', title: hsts ? `HSTS max-age ${Math.floor(age / 86_400)}일` : 'HSTS 미설정', detail: '180일 이상 권장', checks: ['cry-transit'] })
+  const cookies = page.headers.getSetCookie?.() ?? []
+  const name = (c: string) => c.split('=')[0]!.trim()
+  const noSecure = cookies.filter((c) => !/;\s*secure/i.test(c)).map(name)
+  const noHttpOnly = cookies.filter((c) => !/;\s*httponly/i.test(c)).map(name)
+  list.push({ rule: 'cookie-secure', status: noSecure.length ? 'fail' : 'pass', title: cookies.length ? (noSecure.length ? `Secure 속성 없는 쿠키 ${noSecure.length}개` : `쿠키 ${cookies.length}개 모두 Secure`) : '첫 화면에서 설정하는 쿠키 없음', detail: noSecure.join(', '), checks: ['cry-transit'] })
+  if (noHttpOnly.length) list.push({ rule: 'cookie-httponly', status: 'unknown', title: `HttpOnly 속성 없는 쿠키 ${noHttpOnly.length}개(세션 쿠키면 설정 필요)`, detail: noHttpOnly.join(', '), checks: ['dev-req'] })
+  const html = (await page.text()).slice(0, 2_000_000)
+  const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const hasPolicy = /개인정보\s?처리\s?방침|privacy\s(?:policy|statement|notice)/i.test(text)
+  list.push(
+    hasPolicy
+      ? { rule: 'privacy-policy-link', status: 'pass', title: '첫 화면에 개인정보 처리방침 표시', detail: '내용이 법정 사항을 모두 담는지는 따로 확인하세요.', checks: ['prv-policy'] }
+      : { rule: 'privacy-policy-link', status: text.trim().length < 200 ? 'unknown' : 'fail', title: text.trim().length < 200 ? '첫 화면에 글이 거의 없어(스크립트로 그리는 화면 등) 처리방침 표시를 확인하지 못함' : '첫 화면에서 개인정보 처리방침을 찾지 못함', detail: '홈페이지에 지속 게재해야 합니다(시행령 제31조②).', checks: ['prv-policy'] },
+  )
+  return stamp('web', url.host, list)
+}
+
 export async function scanTls(target: string): Promise<Finding[]> {
   if (!/^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(target)) throw new InputError('host 또는 host:port 형식으로 적으세요')
   const [host = '', port = '443'] = target.split(':')

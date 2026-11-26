@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util'
 import { assess, statusNames } from './assess.ts'
 import { loadCatalog } from './catalog.ts'
 import { documentKinds, render, type DocumentKind } from './documents.ts'
-import { importProwler, mergeFindings, scanGithub, scanRepo, scanTls } from './scanners.ts'
+import { importProwler, mergeFindings, scanGithub, scanRepo, scanTls, scanWeb } from './scanners.ts'
 import { loadLaw, roleNames } from './law.ts'
 import { heading, renderReview, reviewSituation, tierNames } from './review.ts'
 import { createApp } from './server.ts'
@@ -29,6 +29,7 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
   scan repo <폴더>              소스의 개인정보·비밀정보·취약 설정 점검
   scan github <owner/repo>      저장소 보안 설정 점검(GITHUB_TOKEN 사용)
   scan tls <host[:port]>        TLS·인증서 점검(권한이 있는 대상만)
+  scan web <https://도메인>      HTTPS 전환·HSTS·쿠키 속성·처리방침 표시 점검(첫 화면만)
   import prowler <ocsf.json>    Prowler 결과 가져오기
   sources                       근거 법령·기준과 확인일 보기
 
@@ -126,7 +127,8 @@ async function main(): Promise<void> {
       if (sub === 'repo') return store(scanRepo(resolve(need(arg, '폴더'))))
       if (sub === 'github') return store(await scanGithub(need(arg, 'owner/repo'), process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN))
       if (sub === 'tls') return store(await scanTls(need(arg, 'host')))
-      throw new InputError('scan repo, scan github, scan tls 중 하나를 쓰세요')
+      if (sub === 'web') return store(await scanWeb(need(arg, 'https://도메인')))
+      throw new InputError('scan repo, scan github, scan tls, scan web 중 하나를 쓰세요')
     case 'import':
       if (sub !== 'prowler') throw new InputError('import prowler <파일>을 쓰세요')
       ws.load()

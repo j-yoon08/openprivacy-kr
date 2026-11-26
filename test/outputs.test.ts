@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { csv, documentKinds, render, type DocumentKind } from '../src/documents.ts'
-import { importProwler, mergeFindings, scanGithub, scanRepo } from '../src/scanners.ts'
+import { importProwler, mergeFindings, scanGithub, scanRepo, scanWeb } from '../src/scanners.ts'
 import { createApp } from '../src/server.ts'
 import { catalog, day, setup } from './helpers.ts'
 
@@ -66,6 +66,21 @@ test('소스 점검은 카드번호(Luhn)·전화번호·하드코딩 비밀값�
   assert.equal(at('phone').detail, 'a.py:4')
   assert.equal(at('hardcoded-secret').detail, 'a.py:5')
   assert.ok(!JSON.stringify(out).includes(secret) && !JSON.stringify(out).includes(card))
+})
+test('웹 점검: HTTPS 전환·HSTS·쿠키·처리방침 표시를 판정한다', async () => {
+  const res = (status: number, h: Record<string, string>, body = '', cookies: string[] = []) => {
+    const headers = new Headers(h)
+    for (const c of cookies) headers.append('set-cookie', c)
+    return { status, url: '', headers, text: async () => body }
+  }
+  const pages: Record<string, ReturnType<typeof res>> = {
+    'http://shop.test/': res(301, { location: 'https://shop.test/' }),
+    'https://shop.test/': res(200, { 'strict-transport-security': 'max-age=31536000' }, `<p>${'상품 '.repeat(80)}</p><a href="/p">개인정보처리방침</a>`, ['sid=1; Secure; HttpOnly', 'ab=2; Path=/']),
+  }
+  const out = await scanWeb('shop.test', async (u) => pages[u]!)
+  assert.deepEqual(Object.fromEntries(out.map((f) => [f.rule, f.status])), { 'https-redirect': 'pass', hsts: 'pass', 'cookie-secure': 'fail', 'cookie-httponly': 'unknown', 'privacy-policy-link': 'pass' })
+  assert.equal(out.find((f) => f.rule === 'cookie-secure')!.detail, 'ab')
+  await assert.rejects(scanWeb('https://u:p@shop.test'), /도메인/)
 })
 test('GitHub 점검: 권한이 없어 못 본 설정은 실패가 아니라 확인 불가', async () => {
   const bodies: Record<string, unknown> = { '': { default_branch: 'main' }, '/branches/main': { protected: false } }
