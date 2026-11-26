@@ -63,6 +63,13 @@ export interface Assessment {
   flowIssues: FlowIssue[]
   counts: Record<Status, number>
   readiness: number
+  start: StartGuide
+}
+/** 처음 쓰는 사람이 어디부터 답할지: 판정을 많이 여는 상황 질문, 우선 답할 점검, 영역별 진행률 */
+export interface StartGuide {
+  facts: { id: string; label: string; checks: number; obligations: number }[]
+  checks: string[]
+  domains: { domain: string; applicable: number; answered: number }[]
 }
 
 export function inScope(c: Check, targets: Target[]): FrameworkId[] {
@@ -141,12 +148,36 @@ export function assess(catalog: Catalog, data: WorkspaceData, ws: Workspace, tod
 
   const counts = tally(checks.map((c) => c.status))
   const applicable = checks.length - counts.na
+  const obligations = catalog.obligations.map((o) => judgeObligation(catalog, o, data))
   return {
     targets, checks, frameworks: frameworkResults, counts,
     readiness: applicable ? Math.round((counts.met / applicable) * 100) : 0,
-    obligations: catalog.obligations.map((o) => judgeObligation(catalog, o, data)),
+    obligations,
     flowIssues: data.flows.flatMap((f) => flowIssues(f, data)),
+    start: startGuide(catalog, checks, obligations),
   }
+}
+
+function startGuide(catalog: Catalog, checks: CheckResult[], obligations: ObligationResult[]): StartGuide {
+  const need = new Map<string, { checks: number; obligations: number }>()
+  const bump = (id: string, k: 'checks' | 'obligations') => { const n = need.get(id) ?? { checks: 0, obligations: 0 }; n[k]++; need.set(id, n) }
+  for (const c of checks) if (c.status === 'needsFact') c.missing.forEach((id) => bump(id, 'checks'))
+  for (const o of obligations) if (o.status === 'verify') o.missing.forEach((id) => bump(id, 'obligations'))
+  const facts = [...need].map(([id, n]) => ({ id, label: catalog.facts.get(id)!.label, ...n }))
+    .sort((a, b) => b.obligations * 5 + b.checks - (a.obligations * 5 + a.checks))
+  const sev = { high: 0, med: 1, low: 2 }
+  const quick = { S: 0, M: 1, L: 2 }
+  const open = checks.filter((c) => c.status === 'unanswered')
+    .sort((a, b) => Number(b.legal) - Number(a.legal) || sev[a.check.severity] - sev[b.check.severity] || quick[a.check.effort] - quick[b.check.effort])
+  const domains = new Map<string, { applicable: number; answered: number }>()
+  for (const c of checks) {
+    if (c.status === 'na') continue
+    const d = domains.get(c.check.domain) ?? { applicable: 0, answered: 0 }
+    d.applicable++
+    if (c.status !== 'unanswered' && c.status !== 'needsFact') d.answered++
+    domains.set(c.check.domain, d)
+  }
+  return { facts, checks: open.slice(0, 20).map((c) => c.check.id), domains: [...domains].map(([domain, d]) => ({ domain, ...d })) }
 }
 
 type Judged = Pick<CheckResult, 'status' | 'current' | 'required' | 'reason' | 'missing'>

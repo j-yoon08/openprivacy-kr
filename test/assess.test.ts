@@ -207,3 +207,15 @@ test('이미 답한 값으로 판정할 수 있으면 더 묻지 않는다', () 
   assert.equal(ob({ revenue: 30, subjects: 5000 }, 'insurance').status, 'notRequired')
   assert.equal(ob({ sensitive: true, subjects: 50000 }, 'usage-notice').status, 'verify')
 })
+
+test('시작 안내: 판정을 많이 여는 상황 질문, 법적 의무부터 답할 점검, 영역별 진행률', () => {
+  const { ws } = setup()
+  const { start, checks } = assess(catalog, ws.load(), ws, day)
+  assert.ok(start.facts.length > 5)
+  assert.ok(start.facts[0]!.checks + start.facts[0]!.obligations >= start.facts.at(-1)!.checks + start.facts.at(-1)!.obligations)
+  const first = checks.find((c) => c.check.id === start.checks[0])!
+  assert.equal(first.status, 'unanswered')
+  assert.equal(first.legal, true)
+  const total = start.domains.reduce((n, d) => n + d.applicable, 0)
+  assert.equal(total, checks.filter((c) => c.status !== 'na').length)
+})

@@ -18,6 +18,7 @@ const usage = `openprivacy-kr — 개인정보 보호법·ISMS-P·ISO 27001 준�
   init                          작업 폴더 만들기
   serve [--port 4820]           웹 화면 열기(127.0.0.1에만 열림)
   assess [--json] [--strict]    부족한 점과 개선 방법 보기
+  next                          어디부터 답할지: 판정을 많이 여는 상황 질문, 먼저 답할 점검, 영역별 진행률
   review [--text 글 | --file 파일] [--yes id,id] [--no id,id] [--title 제목] [--full] [-o 파일]
                                 상황을 법·시행령·고시 전체 조문과 대조(주제 ID는 law topics)
   law [검색어]                  법령 전문 검색(예: law 제34조, law 국외 이전)
@@ -93,6 +94,19 @@ async function main(): Promise<void> {
         if (stale.length) console.log(`1년 넘게 다시 확인하지 않은 답변 ${stale.length}건: ${stale.map((c) => c.check.id).join(', ')}`)
       }
       if (values.strict && open.some((c) => c.legal)) process.exitCode = 2
+      return
+    }
+    case 'next': {
+      const { start } = assess(catalog, ws.load(), ws, today())
+      console.log('먼저 답할 상황 질문 (판정이 많이 열리는 순)')
+      if (!start.facts.length) console.log('- 없음')
+      for (const f of start.facts.slice(0, 10)) console.log(`- ${f.label} — 점검 ${f.checks}개${f.obligations ? `, 법적 의무 ${f.obligations}개` : ''} 판정에 필요`)
+      const byId = new Map(catalog.checks.map((c) => [c.id, c]))
+      console.log('\n먼저 답할 점검 (법적 의무·심각도 순)')
+      if (!start.checks.length) console.log('- 없음')
+      for (const id of start.checks) console.log(`- ${id}: ${byId.get(id)!.need}`)
+      console.log('\n영역별 진행률')
+      for (const d of start.domains) console.log(`- ${d.domain}: ${d.answered}/${d.applicable}`)
       return
     }
     case 'doc': {
