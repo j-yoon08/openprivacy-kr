@@ -248,7 +248,7 @@ function flowIssues(f: Flow, data: WorkspaceData): FlowIssue[] {
   return out
 }
 
-function worst(s: Status[]): Status {
+export function worst(s: Status[]): Status {
   return order.find((o) => s.includes(o))!
 }
 function tally(s: Status[]): Record<Status, number> {

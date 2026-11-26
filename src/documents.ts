@@ -1,4 +1,4 @@
-import { assess, statusNames, type Assessment, type CheckResult } from './assess.ts'
+import { assess, statusNames, worst, type Assessment, type CheckResult } from './assess.ts'
 import type { Catalog } from './catalog.ts'
 import { targetNames, type Workspace } from './workspace.ts'
 
@@ -49,12 +49,20 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ])
     case 'ismsp-statement': {
       const fw = a.frameworks.find((f) => f.id === 'ismsp')
+      const source = catalog.frameworks.find((f) => f.id === 'ismsp')!
+      const byId = new Map(a.checks.map((c) => [c.check.id, c]))
+      // 고시 원문의 요건별 상태: 요건에 연결된 점검 중 적용되는 것의 가장 나쁜 상태
+      const points = (id: string) => (source.requirements.find((x) => x.id === id)?.points ?? []).map((p) => {
+        const live = p.checks.map((c) => byId.get(c)).filter((c): c is CheckResult => !!c && c.status !== 'na')
+        return `[${live.length ? statusNames[worst(live.map((c) => c.status))] : '해당 없음'}] ${p.text}`
+      }).join('\n')
       return csv([
-        ['항목', '항목명', '운영 여부', '운영 현황', '관련 문서·기록(증적)', '선택 제외 사유', '점검 상태'],
+        ['항목', '항목명', '인증기준(고시 원문)', '운영 여부', '요건별 상태', '운영 현황', '관련 문서·기록(증적)', '선택 제외 사유', '점검 상태'],
         ...(fw?.requirements ?? []).map((r) => {
-          const rs = r.checks.map((id) => a.checks.find((c) => c.check.id === id)!)
+          const rs = r.checks.map((id) => byId.get(id)!)
           return [
-            r.id, r.title, { met: 'Y', noEvidence: 'Y(증적 보완)', na: 'N/A' }[r.status as string] ?? 'P/N 확인',
+            r.id, r.title, source.requirements.find((x) => x.id === r.id)?.text ?? '', { met: 'Y', noEvidence: 'Y(증적 보완)', na: 'N/A' }[r.status as string] ?? 'P/N 확인',
+            points(r.id),
             rs.filter((c) => c.status !== 'na').map((c) => `[${statusNames[c.status]}] ${c.check.need}${noteOf(c)}`).join('\n'),
             evidenceText(rs), r.status === 'na' ? rs.map((c) => c.reason).join('\n') : '', statusNames[r.status],
           ]

@@ -37,6 +37,13 @@ test('운영명세서는 101행, SoA는 93행', () => {
   assert.equal(rows('ismsp-statement'), 101)
   assert.equal(rows('soa'), 93)
 })
+test('운영명세서는 항목마다 고시 원문과 요건별 상태를 보여 준다', () => {
+  const { ws } = setup()
+  ws.save('answers', { 'acc-auth': { value: 'yes' }, 'acc-mfa': { value: 'no' } })
+  const row = render('ismsp-statement', catalog, ws, day).split('\r\n').find((l) => l.startsWith('"2.5.3"'))!
+  assert.match(row, /안전한 인증절차와 필요에 따라 강화된 인증방식/)
+  assert.match(row, /\[부족\] 필요에 따라 강화된 인증방식 적용/)
+})
 test('CSV는 수식 실행을 막는다', () => {
   assert.match(csv([['=HYPERLINK("x")', '+1', -5]]), /"'=HYPERLINK\(""x""\)","'\+1","-5"/)
 })
