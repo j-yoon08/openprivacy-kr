@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { assess } from '../src/assess.ts'
@@ -116,4 +116,61 @@ test('잘못된 입력은 저장하지 않는다', () => {
   assert.throws(() => ws.save('answers', { 'log-time': { value: 3 } }), /yes/)
   assert.throws(() => ws.save('evidence', [{ id: 'x', title: 't', checks: ['log-time'], collectedOn: day, file: '../../etc/passwd' }]), /경로/)
   assert.throws(() => ws.save('evidence', [{ id: 'x', title: 't', checks: ['log-time'], collectedOn: day, link: 'javascript:alert(1)' }]), /http/)
+})
+
+test('답변이 바뀔 때만 시각을 찍고 이력을 남기며, 1년이 지난 답변은 재확인 대상으로 표시한다', () => {
+  const { ws } = setup()
+  ws.save('answers', { 'cry-password': { value: 'yes', at: '2000-01-01T00:00:00.000Z' } })
+  const first = ws.load().answers['cry-password']!.at!
+  assert.notEqual(first, '2000-01-01T00:00:00.000Z', '클라이언트가 보낸 시각은 무시')
+  ws.save('answers', { 'cry-password': { value: 'yes', at: 'x' }, 'cry-transit': { value: 'no' } })
+  assert.equal(ws.load().answers['cry-password']!.at, first, '바뀌지 않은 답변은 시각 유지')
+  const log = readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  assert.deepEqual(log.map((l) => [l.check, l.from, l.to]), [['cry-password', null, 'yes'], ['cry-transit', null, 'no']])
+  const later = new Date(Date.parse(first) + 400 * 86_400_000).toISOString().slice(0, 10)
+  const r = assess(catalog, ws.load(), ws, later).checks.find((c) => c.check.id === 'cry-password')!
+  assert.equal(r.answeredAt, first.slice(0, 10))
+  assert.equal(r.stale, true)
+  assert.equal(assess(catalog, ws.load(), ws, first.slice(0, 10)).checks.find((c) => c.check.id === 'cry-password')!.stale, false)
+})
+
+test('답변 이력: 쓰기 실패 시 이력을 남기지 않고, 빠진 점검이 든 옛 파일도 저장을 막지 않는다', () => {
+  const { ws } = setup()
+  ws.save('answers', { 'cry-password': { value: 'no' } })
+  const log = () => (existsSync(join(ws.dir, 'changes.jsonl')) ? readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').length : 0)
+  const before = log()
+  chmodSync(ws.dir, 0o500)
+  try { assert.throws(() => ws.save('answers', { 'cry-password': { value: 'yes' } })) } finally { chmodSync(ws.dir, 0o700) }
+  assert.equal(log(), before, '실패한 저장은 이력에 없음')
+  writeFileSync(join(ws.dir, 'answers.yaml'), 'removed-old-check:\n  value: "yes"\n')
+  ws.save('answers', { 'cry-password': { value: 'yes' } })
+  assert.equal(ws.load().answers['cry-password']!.value, 'yes')
+})
+
+test('재확인: 값 없는 답변·해당 없는 점검은 재확인 대상이 아니고, reconfirm으로 날짜를 갱신하며, 날짜는 한국 시간이다', () => {
+  const { ws } = setup({ cctv: true })
+  writeFileSync(join(ws.dir, 'answers.yaml'), [
+    'cry-transit:\n  owner: 홍길동\n  at: "2024-01-01T00:00:00.000Z"',
+    'prv-cctv:\n  value: "yes"\n  at: "2024-01-01T00:00:00.000Z"',
+    'cry-password:\n  value: "yes"\n  at: "2025-11-25T23:30:00.000Z"',
+    'cry-store:\n  value: "yes"\n  at: "01 Jan 2026"',
+  ].join('\n') + '\n')
+  const at = (id: string, day: string, data = ws.load()) => assess(catalog, data, ws, day).checks.find((c) => c.check.id === id)!
+  assert.equal(at('cry-transit', '2026-11-26').stale, false, '값 없는 답변')
+  assert.equal(at('cry-password', '2026-11-26').answeredAt, '2025-11-26', 'UTC 23:30은 한국 날짜로 다음 날')
+  assert.equal(at('cry-password', '2026-11-26').stale, false, '딱 1년째 날은 아직 아님')
+  assert.equal(at('cry-password', '2026-11-27').stale, true)
+  assert.deepEqual([at('cry-store', '2026-11-26').answeredAt, at('cry-store', '2026-11-26').stale], [undefined, false], 'ISO가 아닌 시각은 무시')
+  const noCctv = ws.load()
+  noCctv.profile.facts.cctv = false
+  assert.equal(at('prv-cctv', '2026-11-26', noCctv).stale, false, '해당 없음')
+  const answers = ws.load().answers
+  ws.save('answers', { ...answers, 'cry-password': { ...answers['cry-password']!, reconfirm: true } })
+  assert.equal(at('cry-password', '2026-11-27').stale, false, '재확인하면 날짜 갱신')
+  assert.equal(ws.load().answers['cry-password']!.reconfirm, undefined, 'reconfirm은 저장하지 않음')
+  const last = readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+  assert.deepEqual([last.check, last.kind], ['cry-password', '재확인'])
+  ws.save('answers', { ...ws.load().answers, 'cry-password': { ...ws.load().answers['cry-password']!, due: '2026-12-31' } })
+  const due = readFileSync(join(ws.dir, 'changes.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+  assert.equal(due.due, '2026-12-31')
 })

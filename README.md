@@ -18,40 +18,48 @@
 
 ## 시작하기
 
-Node.js 22.18 이상과 [pnpm](https://pnpm.io)이 필요합니다.
+Node.js 22.18 이상이 필요합니다. 설치 없이 바로 실행할 수 있습니다.
+
+```sh
+npx -y github:j-yoon08/openprivacy-kr init --dir ~/my-compliance
+npx -y github:j-yoon08/openprivacy-kr serve --dir ~/my-compliance
+```
+
+터미널에 나온 주소를 브라우저에서 엽니다. 자주 쓰면 `npm install -g github:j-yoon08/openprivacy-kr`로 설치한 뒤 `openprivacy-kr serve --dir ~/my-compliance`처럼 씁니다.
+
+소스에서 실행하거나 고치려면:
 
 ```sh
 git clone https://github.com/j-yoon08/openprivacy-kr.git
 cd openprivacy-kr
 pnpm install
-pnpm build
-node dist/src/cli.js serve --dir ~/my-compliance
+node dist/src/cli.js serve --dir examples/sample-shop
 ```
 
-터미널에 나온 주소를 브라우저에서 엽니다. 가상의 쇼핑몰 예시로 먼저 보려면 `--dir examples/sample-shop`을 쓰세요.
+`examples/sample-shop`은 가상의 쇼핑몰 예시입니다.
 
 ## 할 수 있는 일
 
 | 기능 | 내용 |
 | --- | --- |
 | 의무 판정 | 매출, 이용자 수, 처리 형태로 ISMS 의무, CPO 신고, 손해배상 보험, 영향평가 등 20가지를 판정 |
-| 갭 분석 | 134개 점검으로 필요한 의무와 인증 요구를 확인하고 부족한 점, 근거, 제재 조문, 개선 순서, 필요한 증적을 제시 |
+| 갭 분석 | 250개 점검으로 필요한 의무와 인증 요구를 확인하고 부족한 점, 근거, 제재 조문, 개선 순서, 필요한 증적을 제시 |
 | 법령 전문 | 개인정보 보호법 125개 조, 시행령 126개 조, 안전성 확보조치 기준 20개 조와 별표·부칙, 2027년 시행 예정 조문 |
 | 상황 검토 | 실제 상황을 적고 질문에 답하면 전체 조문을 직접 관련, 항상 확인, 함께 볼 조문, 확인 필요, 나머지로 나눔 |
 | 처리 흐름 | 업무별 개인정보 흐름의 누락과 입력 모순(근거 없는 주민등록번호 등)을 탐지 |
 | 위험평가 | 부족한 점을 위험으로 등록하고 처리 계획을 관리 |
 | 증적 | 증적 하나를 여러 기준에 연결하고 만료, 분실, 내용 변경(SHA-256)을 확인 |
-| 문서 초안 | 처리방침, 내부 관리계획(18개 항목), 처리 현황표, ISMS-P 운영명세서, ISO 27001 SoA, 갭 보고서, 개선 과제 |
-| 기술 점검 | 소스(주민등록번호·비밀정보·취약 해시), GitHub 설정, TLS 점검과 Prowler 결과 가져오기 |
+| 문서 초안 | 처리방침, 내부 관리계획(18개 항목), 처리 현황표, ISMS-P 운영명세서(고시 원문과 요건별 상태), ISO 27001 SoA, 갭 보고서, 개선 과제 |
+| 기술 점검 | 소스(주민등록·카드·휴대전화·운전면허 번호, 클라우드 키·하드코딩 비밀값, 취약 해시), GitHub 설정, TLS, 웹사이트(HTTPS 전환·HSTS·쿠키·처리방침 표시) 점검과 Prowler 결과 가져오기 |
 
 ```sh
-node dist/src/cli.js assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2
-node dist/src/cli.js doc report --dir ~/my-compliance -o report.md
-node dist/src/cli.js review --text "해외 상담 SaaS에 회원 문의를 저장하려 한다" --dir ~/my-compliance -o review.md
-node dist/src/cli.js law 제34조
-node dist/src/cli.js scan repo ./my-service --dir ~/my-compliance
-node dist/src/cli.js import prowler result.ocsf.json --dir ~/my-compliance
-node dist/src/cli.js --help
+openprivacy-kr assess --dir ~/my-compliance --strict       # 법적 의무가 남아 있으면 종료 코드 2
+openprivacy-kr doc report --dir ~/my-compliance -o report.md
+openprivacy-kr review --text "해외 상담 SaaS에 회원 문의를 저장하려 한다" --dir ~/my-compliance -o review.md
+openprivacy-kr law 제34조
+openprivacy-kr scan repo ./my-service --dir ~/my-compliance
+openprivacy-kr import prowler result.ocsf.json --dir ~/my-compliance
+openprivacy-kr --help
 ```
 
 TLS 점검은 점검 권한이 있는 대상에만 실행하세요.
@@ -69,7 +77,8 @@ TLS 점검은 점검 권한이 있는 대상에만 실행하세요.
 
 법령과 고시는 국가법령정보센터 원문을 **2026-11-25**에 확인했습니다. 판과 시행일은 [`catalog/sources.yaml`](catalog/sources.yaml)이나 `sources` 명령에서 볼 수 있습니다.
 
-- ISMS-P는 현행 고시의 101개 항목을 씁니다. 강화·표준·간편 개편안과 현행 간편인증(별표 7의2·7의3)은 아직 반영하지 않았습니다.
+- ISMS-P는 현행 고시의 101개 항목과 별표 7의 상세 내용 원문을 씁니다. 상세 내용을 225개 요건으로 나눠 요건마다 점검을 연결했으므로, 넓은 질문 하나에 "예"라고 답해 항목 전체가 충족되지는 않습니다. 요건 분해는 이 프로젝트의 해석이며 KISA 안내서의 세부 확인사항과 같지 않으니, 심사 준비에는 안내서도 함께 보세요.
+- 강화·표준·간편 개편안과 현행 간편인증(별표 7의2·7의3)은 아직 반영하지 않았습니다.
 - ISMS-P 의무화(2027-07-01)의 대상 기준은 현행 시행령에서 확인하지 못해 "확인 필요"로 표시합니다.
 - 전문은 모두 수록하지만 **점검에는 필요한 의무 조문만** 연결합니다(법 42개 조, 안전성 확보조치 기준 15개 조). 갭 분석 100%가 법 전체 준수를 뜻하지 않으며, 나머지 조문은 상황 검토에서 다룹니다. `law coverage`로 조문별 역할을 볼 수 있습니다.
 - 점검은 조문 단위로 연결했고 모든 항·호를 하나씩 점검하지는 않습니다. 제재도 조문 단위 참고 정보입니다.
@@ -81,7 +90,7 @@ TLS 점검은 점검 권한이 있는 대상에만 실행하세요.
 
 ## 데이터와 보안
 
-작업 폴더에는 조직의 취약점과 증적이 들어 있습니다. **공개 저장소에 올리지 마세요.** 웹 서버는 `127.0.0.1`에만 열리고, 실행할 때마다 새로 만드는 토큰과 Host를 확인합니다. 외부로 나가는 통신은 사용자가 실행한 `scan github`와 `scan tls`뿐입니다. 작업 폴더 자체는 암호화하지 않으므로 디스크 암호화를 사용하세요.
+작업 폴더에는 조직의 취약점과 증적이 들어 있습니다. 답변을 바꾸면 바뀐 시각이 기록되고 `changes.jsonl`에 이력이 쌓여, 심사 때 판단 시점을 보여 줄 수 있습니다. 1년이 넘은 답변은 재확인 대상으로 표시합니다. **공개 저장소에 올리지 마세요.** 웹 서버는 `127.0.0.1`에만 열리고, 실행할 때마다 새로 만드는 토큰과 Host를 확인합니다. 외부로 나가는 통신은 사용자가 실행한 `scan github`, `scan tls`, `scan web`뿐입니다. 작업 폴더 자체는 암호화하지 않으므로 디스크 암호화를 사용하세요.
 
 여러 사람이 동시에 편집하는 용도로는 만들지 않았습니다. 같은 작업 폴더를 탭 두 개에서 편집하면 나중에 저장한 값이 남습니다.
 

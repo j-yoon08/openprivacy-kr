@@ -24,3 +24,14 @@ test('개선 방법은 완결된 문장이다(YAML 쉼표로 문장이 쪼개지
 test('법적 의무로 표시한 점검은 개인정보 보호법 조문에 연결된다', () => {
   for (const c of catalog.checks) if (c.legal) assert.ok(c.map.pipa.length, c.id)
 })
+
+test('ISMS-P는 모든 항목에 고시 원문이 있고, 원문의 요건마다 점검이 연결되며, 연결된 점검은 모두 요건에 쓰인다', () => {
+  const fw = catalog.frameworks.find((f) => f.id === 'ismsp')!
+  for (const r of fw.requirements) {
+    assert.match(r.text ?? '', /다\.$/, `${r.id} 원문`)
+    assert.ok(r.points?.length, `${r.id} 요건`)
+    const used = new Set(r.points!.flatMap((p) => p.checks))
+    const mapped = catalog.checks.filter((c) => c.map.ismsp.includes(r.id)).map((c) => c.id)
+    assert.deepEqual(mapped.filter((id) => !used.has(id)), [], `${r.id}: 요건에 쓰지 않은 연결 점검`)
+  }
+})

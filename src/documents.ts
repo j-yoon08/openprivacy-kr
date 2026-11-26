@@ -1,4 +1,4 @@
-import { assess, statusNames, type Assessment, type CheckResult } from './assess.ts'
+import { assess, statusNames, worst, type Assessment, type CheckResult } from './assess.ts'
 import type { Catalog } from './catalog.ts'
 import { targetNames, type Workspace } from './workspace.ts'
 
@@ -49,12 +49,20 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ])
     case 'ismsp-statement': {
       const fw = a.frameworks.find((f) => f.id === 'ismsp')
+      const source = catalog.frameworks.find((f) => f.id === 'ismsp')!
+      const byId = new Map(a.checks.map((c) => [c.check.id, c]))
+      // 고시 원문의 요건별 상태: 요건에 연결된 점검 중 적용되는 것의 가장 나쁜 상태
+      const points = (id: string) => (source.requirements.find((x) => x.id === id)?.points ?? []).map((p) => {
+        const live = p.checks.map((c) => byId.get(c)).filter((c): c is CheckResult => !!c && c.status !== 'na')
+        return `[${live.length ? statusNames[worst(live.map((c) => c.status))] : '해당 없음'}] ${p.text}`
+      }).join('\n')
       return csv([
-        ['항목', '항목명', '운영 여부', '운영 현황', '관련 문서·기록(증적)', '선택 제외 사유', '점검 상태'],
+        ['항목', '항목명', '인증기준(고시 원문)', '운영 여부', '요건별 상태', '운영 현황', '관련 문서·기록(증적)', '선택 제외 사유', '점검 상태'],
         ...(fw?.requirements ?? []).map((r) => {
-          const rs = r.checks.map((id) => a.checks.find((c) => c.check.id === id)!)
+          const rs = r.checks.map((id) => byId.get(id)!)
           return [
-            r.id, r.title, { met: 'Y', noEvidence: 'Y(증적 보완)', na: 'N/A' }[r.status as string] ?? 'P/N 확인',
+            r.id, r.title, source.requirements.find((x) => x.id === r.id)?.text ?? '', { met: 'Y', noEvidence: 'Y(증적 보완)', na: 'N/A' }[r.status as string] ?? 'P/N 확인',
+            points(r.id),
             rs.filter((c) => c.status !== 'na').map((c) => `[${statusNames[c.status]}] ${c.check.need}${noteOf(c)}`).join('\n'),
             evidenceText(rs), r.status === 'na' ? rs.map((c) => c.reason).join('\n') : '', statusNames[r.status],
           ]
@@ -113,6 +121,11 @@ export function render(kind: DocumentKind, catalog: Catalog, ws: Workspace, toda
       ['개인정보 보호책임자 및 문의처', `- 개인정보 보호책임자: ${text('cpoName', 'CPO')}\n- 문의처: ${text('contact', '부서·전화·메일')}`],
       ['권익침해 구제 방법', '- 개인정보침해 신고센터: 국번 없이 118 (privacy.kisa.or.kr)\n- 개인정보 분쟁조정위원회: 1833-6972 (kopico.go.kr)'],
     )
+    if (cond('foreignOnly')) {
+      // 법 제31조의2④: 국내대리인 지정 의무가 있거나 판단 전이면 기재 / 시행령 제31조①4호: 처리 국가
+      if (a.obligations.find((o) => o.id === 'domestic-agent')?.status !== 'notRequired') sections.push(['국내대리인', `- 성명(법인은 명칭과 대표자 성명): ${todo('국내대리인 성명')}\n- 주소(법인은 영업소 소재지): ${todo('주소')}\n- 전화번호: ${todo('전화번호')}\n- 전자우편 주소: ${todo('전자우편')}`])
+      sections.push(['개인정보를 처리하는 국가', `국외에서 국내 정보주체의 개인정보를 직접 수집해 처리하는 국가: ${todo('국가명')}`])
+    }
     if (cond('cctv')) sections.push(['고정형 영상정보처리기기 운영·관리', todo('별도 방침이 없으면 목적·장소·대수·보관기간·책임자를 작성')])
     return [`# 개인정보 처리방침`, draft(today), `${org}은(는) 「개인정보 보호법」 제30조에 따라 이 처리방침을 수립·공개합니다.`, ...sections.map(([t, b], i) => `## ${i + 1}. ${t}\n\n${b}`), `## 부칙\n\n이 처리방침은 ${todo('시행일')}부터 적용합니다. 이전 처리방침: ${todo('링크')}`].join('\n\n') + '\n'
   }
@@ -164,7 +177,7 @@ function report(catalog: Catalog, a: Assessment, org: string, today: string): st
     out.push([
       `### [${c.priorityName}] ${cell(c.required)}`,
       `- 상태: **${statusNames[c.status]}**${c.legal ? ' · 법적 의무' : ''}`,
-      `- 현재: ${cell(c.current)}`, `- 부족한 점: ${cell(c.reason)}`, `- 관련 기준: ${mapText(c)}`,
+      `- 현재: ${cell(c.current)}${c.answeredAt ? ` (판단일 ${c.answeredAt}${c.stale ? ', 1년 넘음: 재확인 필요' : ''})` : ''}`, `- 부족한 점: ${cell(c.reason)}`, `- 관련 기준: ${mapText(c)}`,
       ...(c.sanctions.length ? [`- 조문 단위 제재 참고: ${c.sanctions.map((s) => `법 ${s.article} ${s.item}`).join(', ')}`] : []),
       `- 개선 방법\n${c.check.fix.map((f, i) => `  ${i + 1}. ${f}`).join('\n')}`,
       `- 준비할 증적: ${c.check.evidence.join(', ')}`,
@@ -172,6 +185,8 @@ function report(catalog: Catalog, a: Assessment, org: string, today: string): st
     ].join('\n'))
   }
   if (a.flowIssues.length) out.push('## 개인정보 처리 흐름의 문제\n\n' + table(['업무', '문제', '개선', '근거'], a.flowIssues.map((f) => [f.name, f.issue, f.fix, f.basis])))
+  const stale = a.checks.filter((c) => c.stale)
+  if (stale.length) out.push(`## 1년 넘게 다시 확인하지 않은 답변 (${stale.length}건)\n\n인증 사후심사·갱신심사는 매년 있으므로, 아래 답변은 현재 상태를 다시 확인하세요.\n\n` + table(['점검', '판단일', '현재 상태'], stale.map((c) => [`${c.check.id} ${c.check.need}`, c.answeredAt!, statusNames[c.status]])))
   const unknown = open(a).filter((c) => ['unanswered', 'needsFact'].includes(c.status))
   out.push(`## 아직 판단하지 못한 항목 (${unknown.length}건)\n\n` + (unknown.map((c) => `- \`${c.check.id}\` ${cell(c.check.need)} — ${c.reason}`).join('\n') || '없음'))
   out.push('## 근거와 변경 주시\n\n' + table(['근거', '판', '시행일'], catalog.sources.sources.map((s) => [s.title, s.version, s.effective])) + '\n\n' + catalog.sources.watch.map((w) => `- **${w.title}**: ${w.detail}`).join('\n'))

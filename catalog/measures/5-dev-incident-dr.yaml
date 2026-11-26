@@ -124,3 +124,129 @@ checks:
     fix: [연간 시험 계획을 세우고 복구 시간을 측정합니다., 목표 미달 원인을 개선합니다.]
     evidence: [복구 시험 결과]
     map: { pipa: [기준 제11조], ismsp: [2.12.2], iso: [A.5.30] }
+  - id: dev-vuln-req
+    need: 시스템 도입·개발·변경 시 최신 보안취약점에 대한 대응을 보안 요구사항에 반영한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: S
+    fix: [주요 웹·모바일 취약점 목록을 요구사항 점검표에 넣습니다., 최신 취약점 동향을 반영해 점검표를 정기적으로 갱신합니다., 도입 제품은 알려진 취약점 여부를 확인합니다.]
+    evidence: [보안 요구사항 점검표]
+    map: { ismsp: [2.8.1], iso: [A.8.26] }
+  - id: dev-coding
+    need: 시큐어 코딩 표준을 정해 개발자에게 알리고 코드 리뷰나 도구로 적용 여부를 확인한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: M
+    fix: [사용하는 언어별 시큐어 코딩 표준을 정합니다., 개발자 교육과 외주 계약에 표준을 반영합니다., 코드 리뷰와 정적 분석으로 준수 여부를 확인합니다.]
+    evidence: [시큐어 코딩 표준, 코드 리뷰·분석 결과]
+    map: { ismsp: [2.8.1], iso: [A.8.28] }
+  - id: dev-review-proc
+    need: 도입·구현 결과가 보안 요구사항을 충족하는지 확인할 검토 기준과 절차(법적 요구사항, 취약점 점검, 시큐어 코딩, 영향평가)를 정했다
+    when: { fact: development, is: true }
+    severity: med
+    effort: S
+    fix: [검토 항목과 합격 기준을 정합니다., 검토 시점(설계·구현·오픈 전)과 담당자를 정합니다., 영향평가 대상이면 검토 절차에 포함합니다.]
+    evidence: [보안 검토 기준과 절차]
+    map: { ismsp: [2.8.2], iso: [A.8.29] }
+  - id: dev-data-protect
+    need: 시험 환경에서 운영 데이터를 쓸 때 접근통제·마스킹·로그 등 운영 환경에 준하는 보호조치를 적용한다
+    when: { fact: development, is: true }
+    severity: high
+    effort: M
+    fix: [시험 데이터에 접근할 수 있는 인원을 제한합니다., 개인정보는 마스킹하거나 변환해 사용합니다., 시험 데이터 접근 기록을 남깁니다.]
+    evidence: [시험 환경 접근통제 설정, 시험 데이터 변환 기록]
+    map: { ismsp: [2.8.4], iso: [A.8.33] }
+  - id: dev-source-prod
+    need: 운영 서버에 소스 코드와 빌드 도구를 두지 않고 실행 파일만 배포한다
+    when: { fact: development, is: true }
+    severity: med
+    effort: S
+    fix: [운영 서버에 남아 있는 소스와 빌드 도구를 점검합니다., 빌드 산출물만 배포하도록 배포 절차를 바꿉니다., 정기적으로 운영 서버를 다시 점검합니다.]
+    evidence: [운영 서버 소스 점검 결과, 배포 절차]
+    map: { ismsp: [2.8.5], iso: [A.8.4] }
+  - id: dev-uat
+    need: 운영에 이관하는 실행코드가 시험과 사용자 인수 절차를 통과한 버전인지 확인한 뒤 배포한다
+    when: { fact: development, is: true }
+    severity: med
+    effort: S
+    fix: [사용자 인수 시험 절차와 승인자를 정합니다., 시험을 통과한 빌드만 배포되도록 배포 파이프라인을 설정합니다., 배포 버전과 인수 결과를 연결해 기록합니다.]
+    evidence: [인수 시험 결과, 배포 버전 기록]
+    map: { ismsp: [2.8.6], iso: [A.8.29, A.8.32] }
+  - id: inc-contacts
+    need: KISA·보호위원회·수사기관·보안업체 등 외부기관과 전문가의 연락처와 협조 방법을 정해 최신으로 유지한다
+    severity: med
+    effort: S
+    fix: [사고 유형별로 연락할 외부기관과 전문가를 정합니다., 연락처와 신고 방법을 비상 연락망에 넣습니다., 연락처를 정기적으로 확인해 갱신합니다.]
+    evidence: [외부 협조 연락망]
+    map: { ismsp: [2.11.1], iso: [A.5.5, A.5.6] }
+  - id: inc-vuln-fix
+    need: 발견한 취약점을 위험도별 기한 안에 조치하고 재점검으로 확인한다
+    severity: high
+    effort: M
+    fix: [위험도별 조치 기한을 정합니다., 취약점마다 담당자와 조치 상태를 관리합니다., 조치 후 재점검하고 조치 불가 건은 보완대책을 승인받습니다.]
+    evidence: [취약점 조치 관리대장, 재점검 결과]
+    map: { ismsp: [2.11.2], iso: [A.8.8] }
+  - id: inc-vuln-intel
+    need: 최신 보안취약점 정보를 지속적으로 수집해 보유 시스템에 미치는 영향을 분석하고 조치한다
+    severity: high
+    effort: S
+    fix: [KISA·제조사 보안 공지를 구독합니다., 자산 목록과 대조해 영향받는 시스템을 찾습니다., 영향 분석 결과와 조치 내역을 기록합니다.]
+    evidence: [취약점 정보 수집·영향 분석 기록]
+    map: { ismsp: [2.11.2], iso: [A.5.7, A.8.8] }
+  - id: inc-monitor-followup
+    need: 이상행위 모니터링·점검에서 확인된 사항에 대한 사후조치를 정해진 기한 안에 하고 결과를 기록한다
+    severity: med
+    effort: S
+    fix: [이상행위 유형별 조치 방법과 기한을 정합니다., 경보마다 처리 담당자를 정해 조치합니다., 처리 결과와 기한 준수 여부를 기록합니다.]
+    evidence: [이상행위 사후조치 기록]
+    map: { ismsp: [2.11.3], iso: [A.8.16] }
+  - id: inc-drill-improve
+    need: 모의훈련에서 드러난 미흡사항을 대응 절차·조직·연락망에 반영하고 반영 여부를 확인한다
+    severity: med
+    effort: S
+    fix: [훈련 결과 보고서에 미흡사항과 개선 과제를 적습니다., 대응 절차와 연락망을 개정합니다., 다음 훈련에서 개선 결과를 확인합니다.]
+    evidence: [훈련 개선 과제 목록, 개정된 대응 절차]
+    map: { ismsp: [2.11.4], iso: [A.5.24, A.5.27] }
+  - id: inc-notify
+    need: 유출 등을 인지하면 법정 기한 안에 정보주체 통지와 보호위원회·KISA 신고를 하고 기록을 남긴다
+    legal: true
+    severity: high
+    effort: S
+    fix: [인지 시각부터 기한을 계산해 통지·신고 담당자를 정합니다., 통지문과 신고서를 법정 항목에 맞게 작성해 발송합니다., 통지·신고 일시와 방법을 기록합니다.]
+    evidence: [유출 통지·신고 기록]
+    map: { pipa: [제34조], ismsp: [2.11.5], iso: [A.5.26] }
+  - id: inc-postmortem
+    need: 사고 종료 후 원인을 분석해 재발방지 대책을 세우고 대응체계(절차·교육·위험평가)에 반영한다
+    severity: med
+    effort: S
+    fix: [사고마다 원인 분석 보고서를 작성합니다., 재발방지 대책의 담당자와 기한을 정합니다., 대책을 절차·교육·위험평가에 반영하고 이행을 확인합니다.]
+    evidence: [사고 원인 분석 보고서, 재발방지 대책 이행 기록]
+    map: { ismsp: [2.11.5], iso: [A.5.27] }
+  - id: dr-bia
+    need: 자연재해·통신·전력 장애·해킹 등 재해 유형을 식별하고 유형별 예상 피해와 업무 영향을 분석했다
+    severity: med
+    effort: M
+    fix: [핵심 서비스와 시스템을 정합니다., 재해 유형별 발생 가능성과 피해 규모를 분석합니다., 분석 결과를 업무영향분석 보고서로 정리합니다.]
+    evidence: [재해 유형 목록, 업무영향분석 보고서]
+    map: { ismsp: [2.12.1], iso: [A.5.30] }
+  - id: dr-rto
+    need: 핵심 서비스·시스템별 복구 목표시간(RTO)과 복구 목표시점(RPO)을 정했다
+    severity: med
+    effort: S
+    fix: [업무영향분석 결과로 서비스별 허용 중단 시간을 정합니다., 시스템별 RTO와 RPO를 정해 승인받습니다., 백업 주기와 이중화가 목표에 맞는지 확인합니다.]
+    evidence: [시스템별 RTO·RPO 목록]
+    map: { ismsp: [2.12.1], iso: [A.5.30] }
+  - id: dr-team
+    need: 비상시 복구 조직과 역할, 비상연락체계를 정해 최신으로 유지한다
+    severity: med
+    effort: S
+    fix: [복구 조직의 구성원과 역할을 정합니다., 비상연락망을 만들어 구성원에게 배포합니다., 인사 변동 시 조직과 연락망을 갱신합니다.]
+    evidence: [비상 복구 조직도, 비상연락망]
+    map: { ismsp: [2.12.1], iso: [A.5.29, A.5.30] }
+  - id: dr-update
+    need: 복구 시험 결과와 시스템 환경·법규 변화를 반영해 복구 전략과 대책을 보완하고 개정 이력을 남긴다
+    severity: low
+    effort: S
+    fix: [복구 시험에서 드러난 문제를 정리합니다., 시스템 변경과 법규 변화가 복구 계획에 미치는 영향을 검토합니다., 복구 계획을 개정하고 이력을 남깁니다.]
+    evidence: [복구 계획 개정 이력]
+    map: { ismsp: [2.12.2], iso: [A.5.30] }
