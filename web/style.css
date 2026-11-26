@@ -394,6 +394,24 @@ button.compact {
   padding: 4px 10px;
   font-size: 13px;
 }
+button.reconfirm-btn {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--warn-line);
+}
+button.reconfirm-btn:hover:not(:disabled) {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+button.reconfirm-btn[aria-busy="true"] {
+  opacity: 0.65;
+  cursor: progress;
+}
 
 button:focus-visible,
 a:focus-visible,
@@ -1433,6 +1451,7 @@ mark.hl {
   /* 44px touch targets on phones and small tablets */
   button,
   button.compact,
+  button.reconfirm-btn,
   .nav-item,
   input:not([type="checkbox"]):not([type="radio"]),
   select:not([multiple]),
@@ -1453,6 +1472,7 @@ mark.hl {
   .law > summary { justify-content: center; }
   .facts-toc a { display: inline-flex; align-items: center; }
   .choice-btn { min-width: 60px; padding: 6px 12px; }
+  button.reconfirm-btn { padding: 6px 10px; font-size: 13px; }
   .check { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .choices { width: 100%; }
   .choices label { flex: 1; }

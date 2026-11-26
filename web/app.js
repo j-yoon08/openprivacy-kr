@@ -310,12 +310,28 @@ function fail(e) {
 
 let queue = Promise.resolve()
 let pending = 0
+function stripReconfirm(answers) {
+  if (!answers || typeof answers !== 'object') return answers
+  let changed = false
+  const out = {}
+  for (const [id, a] of Object.entries(answers)) {
+    if (a && Object.hasOwn(a, 'reconfirm')) {
+      changed = true
+      const { reconfirm: _drop, ...rest } = a
+      out[id] = rest
+    } else {
+      out[id] = a
+    }
+  }
+  return changed ? out : answers
+}
 /** 저장 요청을 차례로 보내 늦게 도착한 응답이 새 값을 덮지 않게 합니다. */
 function save(name, value, rerender = false, onSaved) {
   saved.className = ''
   saved.textContent = '저장 중…'
   const payload = JSON.stringify(value)
-  state.data = { ...state.data, [name]: value }
+  const localValue = name === 'answers' ? stripReconfirm(value) : value
+  state.data = { ...state.data, [name]: localValue }
   pending++
   queue = queue.then(async () => {
     try {
@@ -344,6 +360,42 @@ function save(name, value, rerender = false, onSaved) {
     }
   })
   return queue
+}
+
+function reconfirmCheck(checkId, onSaved) {
+  const base = stripReconfirm(state.data.answers)
+  const cur = base[checkId]
+  if (!cur || cur.value === undefined) return Promise.resolve()
+  return save('answers', { ...base, [checkId]: { ...cur, reconfirm: true } }, false, onSaved)
+}
+
+function moveFocusSafely(fromEl, fallbackEl) {
+  if (fromEl && document.activeElement === fromEl && fallbackEl) {
+    fallbackEl.focus({ preventScroll: true })
+  }
+}
+
+function makeReconfirmBtn(checkId, onClick) {
+  let busy = false
+  const btn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact reconfirm-btn',
+      'data-reconfirm-check': checkId,
+      onclick: () => {
+        if (busy) return
+        busy = true
+        btn.setAttribute('aria-busy', 'true')
+        Promise.resolve(onClick(btn)).finally(() => {
+          busy = false
+          btn.removeAttribute('aria-busy')
+        })
+      },
+    },
+    '지금 상태가 맞음(재확인)',
+  )
+  return btn
 }
 
 const draft = (name) => structuredClone(state.data[name])
@@ -698,8 +750,44 @@ function provisionEl(p, opts = {}) {
 }
 
 // Compact expandable gap row (used in home & gaps triage)
-function gapRow(c, defaultOpen = false) {
+function gapRow(c, defaultOpen = false, onReconfirmed = null) {
   const ans = state.data.answers[c.check.id]
+  const summaryStaleTag = c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null
+  const summaryDateEl = c.answeredAt
+    ? h('span', { class: 'small muted check-date' }, `· 판단일 ${c.answeredAt}`)
+    : null
+  const bodyDateEl = c.answeredAt ? h('span', { class: 'check-date' }, c.answeredAt) : null
+  const bodyStaleTag = c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null
+  const editCheckBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact',
+      onclick: () => jumpToCheck(c.check.id),
+    },
+    '점검에서 답변 수정',
+  )
+  const reconfirmBtn = c.stale
+    ? makeReconfirmBtn(c.check.id, () =>
+        reconfirmCheck(c.check.id, () => {
+          const fresh = state.assessment.checks.find((x) => x.check.id === c.check.id)
+          if (!fresh) return
+          if (summaryDateEl) {
+            summaryDateEl.hidden = !fresh.answeredAt
+            summaryDateEl.textContent = fresh.answeredAt ? `· 판단일 ${fresh.answeredAt}` : ''
+          }
+          if (summaryStaleTag) summaryStaleTag.hidden = !fresh.stale
+          if (bodyDateEl) bodyDateEl.textContent = fresh.answeredAt ?? ''
+          if (bodyStaleTag) bodyStaleTag.hidden = !fresh.stale
+          if (!fresh.stale) {
+            moveFocusSafely(reconfirmBtn, editCheckBtn)
+            reconfirmBtn.hidden = true
+          }
+          if (onReconfirmed) onReconfirmed(fresh)
+        }),
+      )
+    : null
+
   return h(
     'details',
     { class: 'gap-row', open: defaultOpen, 'data-check-id': c.check.id },
@@ -715,9 +803,9 @@ function gapRow(c, defaultOpen = false) {
           tag(`p-${c.priorityName}`, c.priorityName),
           tag(`s-${c.status}`, statusNames[c.status]),
           c.legal ? tag('s-required', '법적 의무') : null,
-          c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
+          summaryStaleTag,
           h('span', { class: 'small muted' }, c.check.domain),
-          c.answeredAt ? h('span', { class: 'small muted check-date' }, `· 판단일 ${c.answeredAt}`) : null,
+          summaryDateEl,
           c.sanctions.length ? h('span', { class: 'small muted' }, `· 제재 ${c.sanctions.length}건`) : null,
           c.findings.length ? tag('s-conflict', `기술 점검 실패 ${c.findings.length}건`) : null,
           ans?.owner || ans?.due
@@ -740,12 +828,7 @@ function gapRow(c, defaultOpen = false) {
         c.answeredAt
           ? [
               h('dt', {}, '판단일'),
-              h(
-                'dd',
-                { class: 'row' },
-                h('span', { class: 'check-date' }, c.answeredAt),
-                c.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
-              ),
+              h('dd', { class: 'row' }, bodyDateEl, bodyStaleTag, reconfirmBtn),
             ]
           : null,
         h('dt', {}, '부족한 점'),
@@ -814,15 +897,7 @@ function gapRow(c, defaultOpen = false) {
           },
           '위험으로 등록',
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'compact',
-            onclick: () => jumpToCheck(c.check.id),
-          },
-          '점검에서 답변 수정',
-        ),
+        editCheckBtn,
       ),
     ),
   )
@@ -844,6 +919,34 @@ function homeView() {
     return s === 'expired' || s === 'missing' || s === 'modified'
   })
   const staleList = a.checks.filter((c) => c.stale)
+  const staleBannerText = h('span', {}, '')
+  const staleBannerBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'compact',
+      onclick: () => {
+        checkFilter.mode = 'stale'
+        checkFilter.domain = ''
+        checkFilter.q = ''
+        go('checks')
+      },
+    },
+    '',
+  )
+  const staleBanner = staleList.length > 0
+    ? h('div', { class: 'notice is-warn row between', 'data-stale-banner': '1' }, staleBannerText, staleBannerBtn)
+    : null
+  const syncStaleBanner = () => {
+    if (!staleBanner) return
+    const n = state.assessment.checks.filter((c) => c.stale).length
+    staleBanner.hidden = n === 0
+    if (n > 0) {
+      staleBannerText.textContent = `1년 넘게 재확인하지 않은 답변 ${n}건이 있습니다. 인증 사후·갱신심사는 매년 있으므로 현재 상태를 다시 확인하세요.`
+      staleBannerBtn.textContent = `재확인 필요 ${n}건 보기`
+    }
+  }
+  syncStaleBanner()
 
   return [
     h(
@@ -881,31 +984,7 @@ function homeView() {
           ),
         )
       : null,
-    staleList.length > 0
-      ? h(
-          'div',
-          { class: 'notice is-warn row between', 'data-stale-banner': '1' },
-          h(
-            'span',
-            {},
-            `1년 넘게 재확인하지 않은 답변 ${staleList.length}건이 있습니다. 인증 사후·갱신심사는 매년 있으므로 현재 상태를 다시 확인하세요.`,
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'compact',
-              onclick: () => {
-                checkFilter.mode = 'stale'
-                checkFilter.domain = ''
-                checkFilter.q = ''
-                go('checks')
-              },
-            },
-            `재확인 필요 ${staleList.length}건 보기`,
-          ),
-        )
-      : null,
+    staleBanner,
     h(
       'section',
       { class: 'panel summary' },
@@ -946,7 +1025,7 @@ function homeView() {
         : null,
     ),
     top.length
-      ? h('section', { class: 'panel panel-tight' }, top.map((c) => gapRow(c, false)))
+      ? h('section', { class: 'panel panel-tight' }, top.map((c) => gapRow(c, false, syncStaleBanner)))
       : h(
           'div',
           { class: 'notice row between' },
@@ -1161,6 +1240,13 @@ function checksView() {
       ref.dateEl.hidden = !fresh.answeredAt
       ref.dateEl.textContent = fresh.answeredAt ? `판단일 ${fresh.answeredAt}` : ''
       ref.staleEl.hidden = !fresh.stale
+      if (ref.reconfirmBtn) {
+        if (!fresh.stale && !ref.reconfirmBtn.hidden) {
+          const fallback = ref.rowEl.querySelector('input:checked, input, summary, button:not([hidden]):not([data-reconfirm-check])')
+          moveFocusSafely(ref.reconfirmBtn, fallback)
+        }
+        ref.reconfirmBtn.hidden = !fresh.stale
+      }
     }
     for (const [, meta] of domainMetaEls) {
       const done = meta.ids.filter((id) => state.data.answers[id]?.value !== undefined).length
@@ -1177,9 +1263,10 @@ function checksView() {
     const cur = freshCheck()
     const ans = () => state.data.answers[c.check.id] ?? { note: '', owner: '', due: '' }
     const put = (patch) => {
-      const next = { ...ans(), ...patch }
+      const { reconfirm: _drop, ...base } = ans()
+      const next = { ...base, ...patch }
       if (next.value === undefined) delete next.value
-      save('answers', { ...state.data.answers, [c.check.id]: next }, false, refreshRowStatuses)
+      save('answers', { ...stripReconfirm(state.data.answers), [c.check.id]: next }, false, refreshRowStatuses)
     }
     const a = ans()
     const opts = [
@@ -1191,7 +1278,9 @@ function checksView() {
     const statusTag = tag(`s-${cur.status}`, statusNames[cur.status])
     const dateEl = h('span', { class: 'check-date', hidden: !cur.answeredAt }, cur.answeredAt ? `판단일 ${cur.answeredAt}` : '')
     const staleEl = h('span', { class: 'tag s-stale', hidden: !cur.stale }, '1년 넘음 · 재확인 필요')
-    rowRefs.set(c.check.id, { statusTag, dateEl, staleEl })
+    const reconfirmBtn = cur.stale
+      ? makeReconfirmBtn(c.check.id, () => reconfirmCheck(c.check.id, refreshRowStatuses))
+      : null
 
     const control =
       c.check.type === 'number'
@@ -1227,7 +1316,7 @@ function checksView() {
             ),
           )
 
-    return h(
+    const rowEl = h(
       'div',
       { class: `check${focusId === c.check.id ? ' is-focused' : ''}`, 'data-check-id': c.check.id },
       h(
@@ -1240,6 +1329,7 @@ function checksView() {
           statusTag,
           cur.legal ? tag('s-required', '법적 의무') : null,
           staleEl,
+          reconfirmBtn,
           dateEl,
           h('span', { class: 'mono' }, c.check.id),
           refs(cur) ? h('span', {}, refs(cur)) : null,
@@ -1270,6 +1360,8 @@ function checksView() {
         ),
       ),
     )
+    rowRefs.set(c.check.id, { rowEl, statusTag, dateEl, staleEl, reconfirmBtn })
+    return rowEl
   }
 
   const resetBtn = h(
@@ -1675,7 +1767,26 @@ function ismspView() {
     ]
   }
 
-  const byCheck = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+  let byCheck = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+  const linkedCheckRefs = new Map()
+  const refreshLinkedChecks = () => {
+    byCheck = new Map(state.assessment.checks.map((c) => [c.check.id, c]))
+    for (const [cid, list] of linkedCheckRefs) {
+      const fresh = byCheck.get(cid)
+      if (!fresh) continue
+      for (const ref of list) {
+        ref.dateEl.hidden = !fresh.answeredAt
+        ref.dateEl.textContent = fresh.answeredAt ? `판단일 ${fresh.answeredAt}` : ''
+        if (ref.staleEl) ref.staleEl.hidden = !fresh.stale
+        if (ref.reconfirmBtn) {
+          if (!fresh.stale && !ref.reconfirmBtn.hidden) {
+            moveFocusSafely(ref.reconfirmBtn, ref.jumpBtn)
+          }
+          ref.reconfirmBtn.hidden = !fresh.stale
+        }
+      }
+    }
+  }
   const areaKey = (r) => `${r.id.split('.')[0]}. ${r.group}`
   const subKey = (r) => r.id.split('.').slice(0, 2).join('.')
   const subgroupLabel = (code) => (ismspSubgroups[code] ? `${code} ${ismspSubgroups[code]}` : code)
@@ -1869,7 +1980,17 @@ function ismspView() {
           h('span', { class: 'muted small' }, `${cid} (현재 선택한 기준 외)`),
         )
       }
-      return h(
+      const dateEl = h('span', { class: 'small muted check-date', hidden: !cr.answeredAt }, cr.answeredAt ? `판단일 ${cr.answeredAt}` : '')
+      const staleEl = cr.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null
+      const jumpBtn = h(
+        'button',
+        { type: 'button', class: 'compact', 'data-jump-check': cid, onclick: () => jumpToCheck(cid) },
+        '점검 보기',
+      )
+      const reconfirmBtn = cr.stale
+        ? makeReconfirmBtn(cid, () => reconfirmCheck(cid, refreshLinkedChecks))
+        : null
+      const row = h(
         'div',
         { class: 'linked-check-row', 'data-linked-check': cid },
         h(
@@ -1880,17 +2001,18 @@ function ismspView() {
             { class: 'row' },
             tag(`s-${cr.status}`, statusNames[cr.status]),
             h('span', { class: 'mono small muted' }, cid),
-            cr.answeredAt ? h('span', { class: 'small muted check-date' }, `판단일 ${cr.answeredAt}`) : null,
-            cr.stale ? tag('s-stale', '1년 넘음 · 재확인 필요') : null,
+            dateEl,
+            staleEl,
+            reconfirmBtn,
           ),
           h('div', {}, cr.required),
         ),
-        h(
-          'button',
-          { type: 'button', class: 'compact', 'data-jump-check': cid, onclick: () => jumpToCheck(cid) },
-          '점검 보기',
-        ),
+        jumpBtn,
       )
+      const arr = linkedCheckRefs.get(cid) ?? []
+      arr.push({ row, dateEl, staleEl, reconfirmBtn, jumpBtn })
+      linkedCheckRefs.set(cid, arr)
+      return row
     }
 
     const populate = () => {
@@ -1953,6 +2075,7 @@ function ismspView() {
 
   const renderList = () => {
     critPanels.length = 0
+    linkedCheckRefs.clear()
     const q = ismspFilter.q.trim()
     const qLow = q.toLowerCase()
 
