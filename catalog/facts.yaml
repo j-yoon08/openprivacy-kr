@@ -20,6 +20,8 @@ groups:
       - { id: majorIsp, label: 주요정보통신서비스 제공자인가요?, type: bool }
       - { id: idc, label: 집적정보통신시설(IDC) 사업자인가요?, type: bool }
       - { id: carrier, label: 등록·신고한 기간통신사업자인가요?, type: bool }
+      - { id: mobileCarrier, label: 이동통신사업자인가요?, type: bool }
+      - { id: identityProvider, label: "본인확인기관(정보통신망법 제23조의3 지정)인가요?", type: bool }
       - { id: financial, label: 전자금융거래법상 금융회사인가요?, type: bool }
       - { id: tertiaryHospital, label: 상급종합병원인가요?, type: bool }
       - { id: hospital, label: 의료기관인가요?, type: bool }
@@ -31,6 +33,7 @@ groups:
       - { id: foreignOnly, label: 국내에 주소나 영업소가 없는 사업자인가요?, type: bool }
       - { id: agentOrdered, label: 보호위원회가 국내대리인 지정이 필요하다고 의결했나요?, type: bool }
       - { id: publicSystem, label: 보호위원회가 지정한 공공시스템을 운영하나요?, type: bool }
+      - { id: ismspDesignated, label: "ISMS-P 인증 대상으로 보호위원회가 고시한 공공시스템운영기관인가요?", type: bool }
   - title: 개인정보 규모
     facts:
       - { id: subjects, label: 개인정보를 처리하는 정보주체 수(전체), type: number, unit: 명 }

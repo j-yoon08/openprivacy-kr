@@ -217,6 +217,7 @@ function judgeObligation(catalog: Catalog, o: Obligation, data: WorkspaceData): 
     const missing = missingFacts(o.when, facts, catalog.conditions)
     return { ...base, status: 'verify', missing, text: `판정에 필요한 값: ${missing.map((m) => catalog.facts.get(m)!.label).join(', ')}` }
   }
+  if (v && o.draft) return { ...base, status: 'verify', text: o.required }
   return v ? { ...base, status: 'required', text: o.required } : { ...base, status: 'notRequired', text: o.otherwise }
 }
 
